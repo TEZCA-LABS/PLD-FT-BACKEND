@@ -18,3 +18,4 @@ langchain-openai
 pgvector
 email-validator
 argon2-cffi
+xmltodict
