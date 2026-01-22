@@ -58,6 +58,4 @@ async def verify_user_logic():
             log("[FAIL] Verification failed: User still exists.")
 
 if __name__ == "__main__":
-    if sys.platform == 'win32':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(verify_user_logic())
