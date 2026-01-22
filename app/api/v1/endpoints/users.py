@@ -69,3 +69,48 @@ async def update_user_endpoint(
         )
     user = await update_user(db, db_user=user, user_in=user_in)
     return user
+
+@router.get("/", response_model=List[User])
+async def read_users(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_superuser),
+) -> Any:
+    """
+    Retrieve users.
+    Only superusers can see the list of users.
+    """
+    from app.services.user_service import get_multi_users
+    users = await get_multi_users(db, skip=skip, limit=limit)
+    return users
+
+@router.delete("/{user_id}", response_model=User)
+async def delete_user_endpoint(
+    *,
+    db: AsyncSession = Depends(get_db),
+    user_id: int,
+    current_user: User = Depends(deps.get_current_active_superuser),
+) -> Any:
+    """
+    Delete a user.
+    Only superusers can delete users.
+    """
+    from app.services.user_service import delete_user, get_user
+    
+    user = await get_user(db, user_id=user_id)
+    if not user:
+         raise HTTPException(
+            status_code=404,
+            detail="The user with this id does not exist in the system",
+        )
+    
+    # Optional: Prevent deleting self
+    if user.id == current_user.id:
+         raise HTTPException(
+            status_code=400,
+            detail="You cannot delete yourself.",
+        )
+        
+    user = await delete_user(db, user_id=user_id)
+    return user

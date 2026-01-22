@@ -43,3 +43,15 @@ async def update_user(db: AsyncSession, *, db_user: User, user_in: UserUpdate) -
     await db.commit()
     await db.refresh(db_user)
     return db_user
+
+async def get_multi_users(db: AsyncSession, *, skip: int = 0, limit: int = 100) -> List[User]:
+    result = await db.execute(select(User).offset(skip).limit(limit))
+    return result.scalars().all()
+
+async def delete_user(db: AsyncSession, *, user_id: int) -> Optional[User]:
+    user = await get_user(db, user_id=user_id)
+    if not user:
+        return None
+    await db.delete(user)
+    await db.commit()
+    return user
