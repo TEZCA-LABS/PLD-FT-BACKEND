@@ -39,23 +39,23 @@ async def verify_user_logic():
         # Verify our user is in the list
         found = any(u.id == created_user.id for u in users)
         if found:
-            log("✅ Created user found in list.")
+            log("[OK] Created user found in list.")
         else:
-            log("❌ Created user NOT found in list.")
+            log("[FAIL] Created user NOT found in list.")
 
         log("\n--- 3. Testing delete_user ---")
         deleted_user = await delete_user(session, user_id=created_user.id)
         if deleted_user:
-             log(f"✅ Deleted user: {deleted_user.email}")
+             log(f"[OK] Deleted user: {deleted_user.email}")
         else:
-             log("❌ Failed to delete user.")
+             log("[FAIL] Failed to delete user.")
 
         # Verify deletion
         check_user = await get_user_by_email(session, test_email)
         if not check_user:
-            log("✅ Verification confirmed: User is gone from DB.")
+            log("[OK] Verification confirmed: User is gone from DB.")
         else:
-            log("❌ Verification failed: User still exists.")
+            log("[FAIL] Verification failed: User still exists.")
 
 if __name__ == "__main__":
     if sys.platform == 'win32':
