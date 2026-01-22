@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # OPENAI
     OPENAI_API_KEY: str
 
+    # Sanctions
+    UN_SANCTIONS_XML_URL: str = "https://scsanctions.un.org/resources/xml/sp/consolidated.xml"
+
     # CORS
     BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
 
