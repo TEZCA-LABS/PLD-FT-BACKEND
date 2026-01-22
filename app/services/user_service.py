@@ -28,3 +28,18 @@ async def create_user(db: AsyncSession, user: UserCreate, created_by_id: Optiona
     await db.commit()
     await db.refresh(db_user)
     return db_user
+
+async def update_user(db: AsyncSession, *, db_user: User, user_in: UserUpdate) -> User:
+    update_data = user_in.model_dump(exclude_unset=True)
+    if "password" in update_data and update_data["password"]:
+        hashed_password = get_password_hash(update_data["password"])
+        update_data["hashed_password"] = hashed_password
+        del update_data["password"]
+    
+    for field, value in update_data.items():
+        setattr(db_user, field, value)
+    
+    db.add(db_user)
+    await db.commit()
+    await db.refresh(db_user)
+    return db_user
