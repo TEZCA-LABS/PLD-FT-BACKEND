@@ -43,3 +43,24 @@ async def update_user(db: AsyncSession, *, db_user: User, user_in: UserUpdate) -
     await db.commit()
     await db.refresh(db_user)
     return db_user
+
+async def get_multi_users(db: AsyncSession, *, skip: int = 0, limit: int = 100) -> List[User]:
+    """
+    Retrieve a list of users using offset/limit pagination.
+
+    Note:
+        This function executes the query and materializes the entire page
+        of results in memory via ``.all()``. Callers should pass a
+        reasonable ``limit`` (e.g. a small page size) to avoid loading
+        excessively large result sets into memory.
+    """
+    result = await db.execute(select(User).offset(skip).limit(limit))
+    return result.scalars().all()
+
+async def delete_user(db: AsyncSession, *, user_id: int) -> Optional[User]:
+    user = await get_user(db, user_id=user_id)
+    if not user:
+        return None
+    await db.delete(user)
+    await db.commit()
+    return user
