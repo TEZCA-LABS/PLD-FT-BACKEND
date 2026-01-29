@@ -1,5 +1,9 @@
 import asyncio
 import sys
+import os
+
+# Add parent directory to Python path to ensure 'app' module is found
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.db.session import async_session
 from app.services.user_service import get_multi_users, create_user, delete_user, get_user_by_email
 from app.schemas.user_schema import UserCreate

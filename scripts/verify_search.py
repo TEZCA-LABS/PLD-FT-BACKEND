@@ -1,5 +1,9 @@
 import asyncio
 import sys
+import os
+
+# Add parent directory to Python path to ensure 'app' module is found
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker

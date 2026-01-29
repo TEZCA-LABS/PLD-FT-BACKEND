@@ -17,4 +17,8 @@ celery_app.conf.beat_schedule = {
         "task": "sync_un_sanctions_task",
         "schedule": crontab(day_of_month="1", hour=0, minute=0), # Run at midnight on the 1st of every month
     },
+    "sync-mex-sanctions-monthly": {
+        "task": "sync_mex_sanctions_task",
+        "schedule": crontab(day_of_month="1", hour=0, minute=30), # Run at 00:30 on the 1st of every month
+    },
 }
