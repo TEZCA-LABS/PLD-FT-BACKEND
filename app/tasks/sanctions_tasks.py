@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from app.core.celery_app import celery_app
 from app.core.config import settings
 # from app.db.session import engine # Removed global engine import
+# from app.db.session import engine # Removed global engine import
 from app.services.sanction_service import sync_sanctions_data
+from app.services.mex_sanction_service import sync_mex_sanctions_data
 
 logger = get_task_logger(__name__)
 
@@ -39,6 +41,35 @@ def sync_un_sanctions_task():
         # raise self.retry(exc=e)
         raise e
 
+@celery_app.task(name="sync_mex_sanctions_task")
+def sync_mex_sanctions_task():
+    """
+    Celery task to:
+    1. Download the Mexican Sanctions CSV.
+    2. Run the async synchronization service.
+    """
+    logger.info("Starting Mexican Sanctions Sync Task...")
+    
+    try:
+        # Download CSV
+        # verify=False is often needed for some gov sites if cert chain is incomplete, 
+        # but let's try with default first or follow existing pattern.
+        # User output showed curl worked with default options, so standard httpx should work.
+        response = httpx.get(settings.MEX_SANCTIONS_CSV_URL, timeout=120.0, follow_redirects=True)
+        response.raise_for_status()
+        csv_content = response.content
+        logger.info(f"Downloaded CSV successfully. Size: {len(csv_content)} bytes")
+        
+        # Run Async Logic in Sync Task
+        asyncio.run(run_mex_sync_logic(csv_content))
+        
+        logger.info("Mexican Sanctions Sync Task Completed Successfully.")
+        return "Sync Successful"
+        
+    except Exception as e:
+        logger.error(f"Error in Mexican Sanctions Sync Task: {e}")
+        raise e
+
 from sqlalchemy.ext.asyncio import create_async_engine
 
 # ... (imports)
@@ -63,4 +94,21 @@ async def run_sync_logic(xml_content: bytes):
             logger.info(f"Sync Result: {result}")
     finally:
         # Crucial: Dispose the engine to close connections
+        await local_engine.dispose()
+
+async def run_mex_sync_logic(csv_content: bytes):
+    """
+    Helper to run async service logic from sync task.
+    """
+    local_engine = create_async_engine(settings.SQLALCHEMY_DATABASE_URI, future=True, echo=True)
+    
+    local_async_session = sessionmaker(
+        local_engine, class_=AsyncSession, expire_on_commit=False
+    )
+    
+    try:
+        async with local_async_session() as session:
+            result = await sync_mex_sanctions_data(session, csv_content)
+            logger.info(f"Mex Sync Result: {result}")
+    finally:
         await local_engine.dispose()

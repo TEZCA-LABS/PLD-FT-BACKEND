@@ -57,7 +57,7 @@ La selección del stack tecnológico responde a criterios de rendimiento, escala
 | **PostgreSQL + pgvector** | PostgreSQL es el estándar de oro en bases de datos relacionales. `pgvector` permite capacidades de búsqueda vectorial (necesarias para IA) sin la complejidad operativa de mantener una base de datos vectorial dedicada (como Pinecone o Milvus), manteniendo la integridad referencial con los datos relacionales. |
 | **Celery + Redis** | Para operaciones de larga duración (scraping, procesamiento de documentos), es imperativo liberar al servidor API. Celery ofrece una cola de tareas robusta y distribuida, usando Redis como broker de mensajes de baja latencia. |
 | **Argon2** | Algoritmo de hashing de contraseñas ganador de la Password Hashing Competition. Ofrece resistencia superior a ataques de fuerza bruta mediante GPU/ASIC en comparación con algoritmos más antiguos como bcrypt o PBKDF2. |
-| **Docker** | Garantiza la consistencia del entorno entre desarrollo, pruebas y producción, encapsulando todas las dependencias del sistema. |
+| **Docker** | Garantiza la consistencia del entorno entre desarrollo, pruebas y producción. Se utiliza un **Dockerfile optimizado (Multi-Stage Build)** que separa la fase de construcción del entorno de ejecución, reduciendo el tamaño de la imagen final y mejorando la seguridad al ejecutarse como usuario no privilegiado (`appuser`). |
 
 ## 4. Protocolos de Seguridad y Control de Acceso
 
@@ -102,4 +102,65 @@ Para mantener la integridad arquitectónica, todo nuevo desarrollo debe seguir e
 *   **Asincronía**: Preferir siempre `async def` para endpoints y operaciones de I/O.
 *   **Inyección de Dependencias**: Utilizar el sistema de DI de FastAPI para sesiones de base de datos y autenticación.
 
+### 6. Scripts Operativos
+
+El proyecto incluye una serie de scripts de utilidad en el directorio `scripts/`. Se deben ejecutar desde la raíz del proyecto para que las importaciones funcionen correctamente.
+
+*   **Sincronización Manual (PLD/FT)**:
+    ```bash
+    python scripts/trigger_sync.py
+    ```
+    Desencadena manualmente la descarga y sincronización de las listas de sanciones (ONU y México). Requiere que Redis esté corriendo localmente o configurar `REDIS_URL`.
+
+*   **Verificación de Usuarios**:
+    ```bash
+    python scripts/verify_users.py
+    ```
+    Crea un usuario de prueba, lista usuarios y verifica la eliminación. Útil para smoke testing de la base de datos.
+    
+*   **Reset Password**:
+    ```bash
+    python scripts/reset_password.py <email> <new_password>
+    ```
+    Permite restablecer la contraseña de un usuario manualmente si se tiene acceso al servidor.
+
+*   **Verificación de Búsqueda**:
+    ```bash
+    python scripts/verify_search.py
+    ```
+    Prueba la funcionalidad de búsqueda en la tabla de sanciones.
+
+### 7. Despliegue y Ejecución con Docker
+
+El sistema está completamente contenerizado. A continuación se detallan los comandos para la gestión del ciclo de vida de los contenedores.
+
+*   **Iniciar el entorno (Build & Run)**:
+    Este comando construye las imágenes (si hubo cambios) y levanta los servicios en segundo plano.
+    ```bash
+    docker-compose up --build -d
+    ```
+
+*   **Actualizar cambios**:
+    Si modificas el código fuente, es necesario reconstruir los contenedores para reflejar los cambios:
+    ```bash
+    docker-compose up --build -d
+    ```
+    *Nota: Gracias al Dockerfile optimizado, solo se reconstruirán las capas que hayan cambiado.*
+
+*   **Ver logs**:
+    Para monitorear la salida de todos los servicios:
+    ```bash
+    docker-compose logs -f
+    ```
+    O de un servicio específico (ej. `worker`):
+    ```bash
+    docker-compose logs -f worker
+    ```
+
+*   **Detener el entorno**:
+    ```bash
+    docker-compose down
+    ```
+
 ---
+
