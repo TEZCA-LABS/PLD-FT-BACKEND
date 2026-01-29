@@ -31,7 +31,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # Create a non-root user for security
-RUN addgroup --system appgroup && adduser --system --group appgroup appuser
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 
 # Copy installed python dependencies from the builder stage
 COPY --from=builder /install /usr/local
