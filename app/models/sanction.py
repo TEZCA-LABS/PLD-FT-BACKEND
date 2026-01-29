@@ -30,3 +30,7 @@ class Sanction(Base):
     source = Column(String, default="UN_CONSOLIDATED") 
     sanction_date = Column(Date, nullable=True) # Kept for compatibility, can mirror listed_on
     last_updated = Column(Date, nullable=True) # LAST_DAY_UPDATED
+    
+    # Vector Search
+    from pgvector.sqlalchemy import Vector
+    embedding = Column(Vector(1536)) # OpenAI text-embedding-ada-002 dimension

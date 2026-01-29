@@ -130,9 +130,54 @@ El proyecto incluye una serie de scripts de utilidad en el directorio `scripts/`
     ```
     Prueba la funcionalidad de búsqueda en la tabla de sanciones.
 
+*   **Verificación de Búsqueda Híbrida (Nueva)**:
+    ```bash
+    python scripts/verify_hybrid_search.py
+    ```
+    Prueba la búsqueda exacta, difusa (fuzzy) y vectorial. Requiere habilitar extensiones en la BD:
+    ```sql
+    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+    CREATE EXTENSION IF NOT EXISTS vector;
+    ```
+
+---
+
+## 8. API de Búsqueda Inteligente
+
+El sistema expone un endpoint unificado para búsqueda de sanciones:
+
+`GET /api/v1/search/sanctions?q={nombre}`
+
+### Estrategia de Búsqueda (3 Capas)
+1.  **Exacta**: Coincidencia directa con `ILIKE`.
+2.  **Difusa (Fuzzy)**: Utiliza trigramas (`pg_trgm`) para tolerar errores tipográficos (ej. "Gomez" vs "Gomes").
+3.  **Vectorial (Semántica)**: Utiliza embeddings de OpenAI y `pgvector` para encontrar coincidencias conceptuales o variaciones complejas. *Requiere configurar `OPENAI_API_KEY`*.
+
 ### 7. Despliegue y Ejecución con Docker
 
 El sistema está completamente contenerizado. A continuación se detallan los comandos para la gestión del ciclo de vida de los contenedores.
+
+#### Comandos Útiles
+
+*   **Levantar servicios**:
+    ```bash
+    docker-compose up -d --build
+    ```
+*   **Ver logs**:
+    ```bash
+    docker-compose logs -f
+    ```
+*   **Ejecutar scripts manuales (ej. Sincronización)**:
+    Para ejecutar scripts que requieren acceso a la base de datos o Redis, debes correrlos **dentro** del contenedor `backend`:
+    ```bash
+    docker-compose exec backend python scripts/trigger_sync.py
+    ```
+    *Esto ejecutará la sincronización de listas sin necesidad de configuración local.*
+
+*   **Entrar a la consola del contenedor**:
+    ```bash
+    docker-compose exec backend bash
+    ```
 
 *   **Iniciar el entorno (Build & Run)**:
     Este comando construye las imágenes (si hubo cambios) y levanta los servicios en segundo plano.
