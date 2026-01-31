@@ -3,10 +3,19 @@ from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel, EmailStr
 
+from enum import Enum
+
+class UserRole(str, Enum):
+    ADMIN = "admin"
+    AUDITOR = "auditor"
+    CONSULTANT = "consultant"
+    USER = "user"
+
 class UserBase(BaseModel):
     email: EmailStr
     is_active: Optional[bool] = True
     is_superuser: Optional[bool] = False
+    role: UserRole = UserRole.CONSULTANT
 
 class UserCreate(UserBase):
     password: str

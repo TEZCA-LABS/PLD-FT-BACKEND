@@ -22,6 +22,7 @@ async def create_user(db: AsyncSession, user: UserCreate, created_by_id: Optiona
         hashed_password=hashed_password,
         is_active=user.is_active,
         is_superuser=user.is_superuser,
+        role=user.role,
         created_by_id=created_by_id
     )
     db.add(db_user)
