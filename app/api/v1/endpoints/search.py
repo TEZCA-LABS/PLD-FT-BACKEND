@@ -13,7 +13,7 @@ async def search_sanctions_endpoint(
     q: str = Query(..., min_length=2, description="Search query (name, reference, etc.)"),
     limit: int = Query(10, le=50),
     db: AsyncSession = Depends(deps.get_db),
-    # current_user = Depends(deps.get_current_active_user) # Uncomment to protect
+    current_user: Any = Depends(deps.get_current_active_user)
 ) -> Any:
     """
     Search for sanctioned entities using hybrid search (Exact, Fuzzy, Vector).
