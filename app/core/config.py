@@ -7,11 +7,20 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "PLD-FT Backend"
     
+    DEBUG: bool = False
+    
     # SECURITY
-    SECRET_KEY: str = "changethis" # TODO: Change in production
+    SECRET_KEY: str = "key" 
+    @validator("SECRET_KEY")
+    def warn_if_default_secret(cls, v):
+        if v == "key":
+            import warnings
+            warnings.warn("The SECRET_KEY is set to the default insecure value. Change this in production.", UserWarning)
+        return v
+        
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    MASTER_PASSWORD: str = "admin_master_secret" # Default for dev
+    MASTER_PASSWORD: str = "admin_master_secret"
     FIRST_SUPERUSER: str = "admin@example.com"
     FIRST_SUPERUSER_PASSWORD: str = "admin"
     

@@ -6,7 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.schemas.user_schema import User, UserCreate, UserUpdate
-from app.services.user_service import create_user, get_user_by_email
+from app.services.user_service import (
+    create_user, 
+    get_user_by_email, 
+    get_user, 
+    update_user, 
+    get_multi_users, 
+    delete_user
+)
 
 from app.api import deps
 from app.core.config import settings
@@ -59,7 +66,7 @@ async def update_user_endpoint(
     Update a user.
     Only superusers can update users.
     """
-    from app.services.user_service import get_user, update_user
+
     
     user = await get_user(db, user_id=user_id)
     if not user:
@@ -81,7 +88,7 @@ async def read_users(
     Retrieve users.
     Only superusers can see the list of users.
     """
-    from app.services.user_service import get_multi_users
+
     users = await get_multi_users(db, skip=skip, limit=limit)
     return users
 
@@ -96,7 +103,7 @@ async def delete_user_endpoint(
     Delete a user.
     Only superusers can delete users.
     """
-    from app.services.user_service import delete_user, get_user
+
     
     user = await get_user(db, user_id=user_id)
     if not user:
