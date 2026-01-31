@@ -44,8 +44,23 @@ async def get_current_active_user(
 async def get_current_active_superuser(
     current_user: User = Depends(get_current_active_user),
 ) -> User:
-    if not current_user.is_superuser:
+    if not current_user.is_superuser and current_user.role != "admin":
         raise HTTPException(
             status_code=400, detail="The user doesn't have enough privileges"
         )
     return current_user
+
+async def get_current_active_privileged_user(
+    current_user: User = Depends(get_current_active_user),
+) -> User:
+    """
+    Checks if the user is a superuser, admin, or auditor.
+    """
+    if current_user.is_superuser:
+        return current_user
+    if current_user.role in ["admin", "auditor"]:
+        return current_user
+        
+    raise HTTPException(
+        status_code=403, detail="Not authorized to view audit logs."
+    )

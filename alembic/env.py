@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 from app.db.base import Base
-from app.models import user, entity, sanction, entity_profile # Import models to register them
+from app.models import user, entity, sanction, entity_profile, audit_log # Import models to register them
 from app.core.config import settings
 
 # this is the Alembic Config object, which provides
