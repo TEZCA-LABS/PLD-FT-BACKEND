@@ -10,6 +10,7 @@ from app.core.config import settings
 # from app.db.session import engine # Removed global engine import
 from app.services.sanction_service import sync_sanctions_data
 from app.services.mex_sanction_service import sync_mex_sanctions_data
+from app.services.sat_service import sync_sat_sanctions_data
 
 logger = get_task_logger(__name__)
 
@@ -70,6 +71,34 @@ def sync_mex_sanctions_task():
         logger.error(f"Error in Mexican Sanctions Sync Task: {e}")
         raise e
 
+@celery_app.task(name="sync_sat_sanctions_task")
+def sync_sat_sanctions_task():
+    """
+    Celery task to:
+    1. Download the SAT 69-B CSV.
+    2. Run the async synchronization service.
+    """
+    logger.info("Starting SAT 69-B Sync Task...")
+    
+    try:
+        # Download CSV
+        # SAT often redirects or blocks automated requests, so headers/timeouts might be needed.
+        # But we start simple as per requirement.
+        response = httpx.get(settings.SAT_69B_CSV_URL, timeout=120.0, follow_redirects=True)
+        response.raise_for_status()
+        csv_content = response.content
+        logger.info(f"Downloaded SAT CSV successfully. Size: {len(csv_content)} bytes")
+        
+        # Run Async Logic
+        asyncio.run(run_sat_sync_logic(csv_content))
+        
+        logger.info("SAT 69-B Sync Task Completed Successfully.")
+        return "Sync Successful"
+        
+    except Exception as e:
+        logger.error(f"Error in SAT 69-B Sync Task: {e}")
+        raise e
+
 from sqlalchemy.ext.asyncio import create_async_engine
 
 # ... (imports)
@@ -110,5 +139,22 @@ async def run_mex_sync_logic(csv_content: bytes):
         async with local_async_session() as session:
             result = await sync_mex_sanctions_data(session, csv_content)
             logger.info(f"Mex Sync Result: {result}")
+    finally:
+        await local_engine.dispose()
+
+async def run_sat_sync_logic(csv_content: bytes):
+    """
+    Helper to run async service logic from sync task.
+    """
+    local_engine = create_async_engine(settings.SQLALCHEMY_DATABASE_URI, future=True, echo=True)
+    
+    local_async_session = sessionmaker(
+        local_engine, class_=AsyncSession, expire_on_commit=False
+    )
+    
+    try:
+        async with local_async_session() as session:
+            result = await sync_sat_sanctions_data(session, csv_content)
+            logger.info(f"SAT 69-B Sync Result: {result}")
     finally:
         await local_engine.dispose()

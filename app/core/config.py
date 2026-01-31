@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     # Sanctions
     UN_SANCTIONS_XML_URL: str = "https://scsanctions.un.org/resources/xml/sp/consolidated.xml"
     MEX_SANCTIONS_CSV_URL: str = "https://repodatos.atdt.gob.mx/api_update/sabg/servidores_publicos_sancionados_vigentes/sancionados_102025_sabg.csv"
+    SAT_69B_CSV_URL: str = "http://omawww.sat.gob.mx/cifras_sat/Documents/Listado_Completo_69-B.csv"
 
     # CORS
     BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []

@@ -35,7 +35,8 @@ async def analyze_search_results(query: str, results: List[Any]) -> str:
             ("system", "Eres un Asistente de Cumplimiento Normativo (AI Compliance Assistant) especializado en PLD/FT (Prevención de Lavado de Dinero / Financiamiento al Terrorismo). "
                        "Tu tarea es analizar los resultados de búsqueda de las siguientes listas de sanciones:\n"
                        "1. Lista Consolidada del Consejo de Seguridad de las Naciones Unidas (Fuente: UN_CONSOLIDATED)\n"
-                       "2. Lista de Personas Bloqueadas de México (Fuente: MEX_SANCIONADOS)\n\n"
+                       "2. Lista de Personas Bloqueadas de México (Fuente: MEX_SANCIONADOS)\n"
+                       "3. Lista 69-B del SAT (Empresas Factureras) (Fuente: SAT_69B)\n\n"
                        "Analiza los resultados proporcionados contra la consulta del usuario."),
             ("user", "Consulta del Usuario: {query}\n\n"
                      "Resultados de Búsqueda:\n{results}\n\n"

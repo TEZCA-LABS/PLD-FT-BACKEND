@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Optional
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text, or_
+from sqlalchemy import select, text, or_, String, cast
 from app.models.sanction import Sanction
 from openai import AsyncOpenAI
 import logging
@@ -12,9 +12,7 @@ logger = logging.getLogger(__name__)
 # ...
 
 async def get_embedding(text: str) -> List[float]:
-    """
-    Generates an embedding for the given text using OpenAI.
-    """
+    # ... (unchanged)
     if not settings.OPENAI_API_KEY or settings.OPENAI_API_KEY == "sk-placeholder":
         logger.warning("OpenAI API Key not set. Skipping vector generation.")
         return []
@@ -41,8 +39,13 @@ async def search_sanctions(db: AsyncSession, query: str, limit: int = 10, thresh
     results = []
     seen_ids = set()
 
-    # 1. Exact Match
-    stmt_exact = select(Sanction).filter(Sanction.entity_name.ilike(f"%{query}%")).limit(limit)
+    # 1. Exact Match (High Priority)
+    stmt_exact = select(Sanction).filter(
+        or_(
+            Sanction.entity_name.ilike(f"%{query}%"),
+            cast(Sanction.aliases, String).ilike(f"%{query}%") # Search in aliases JSON
+        )
+    ).limit(limit)
     res_exact = await db.execute(stmt_exact)
     exact_matches = res_exact.scalars().all()
     
@@ -52,7 +55,7 @@ async def search_sanctions(db: AsyncSession, query: str, limit: int = 10, thresh
             seen_ids.add(m.id)
 
     if len(results) >= limit:
-        return results
+        return await expand_clusters(db, results)
 
     # 2. Fuzzy Match (Trigram)
     # Requires pg_trgm extension enabled in DB
@@ -73,7 +76,7 @@ async def search_sanctions(db: AsyncSession, query: str, limit: int = 10, thresh
                     seen_ids.add(m.id)
                 
             if len(results) >= limit:
-                return results[:limit]
+                return await expand_clusters(db, results[:limit])
 
     except Exception as e:
         logger.warning(f"Fuzzy search failed (ensure pg_trgm is enabled): {e}")
@@ -100,4 +103,40 @@ async def search_sanctions(db: AsyncSession, query: str, limit: int = 10, thresh
         except Exception as e:
             logger.warning(f"Vector search failed (ensure pgvector is enabled): {e}")
 
-    return results[:limit]
+    return await expand_clusters(db, results[:limit])
+
+from sqlalchemy.orm import selectinload
+
+async def expand_clusters(db: AsyncSession, results: List[Sanction]) -> List[Sanction]:
+    """
+    For each result, checks if it belongs to a profile.
+    If so, fetches ALL other sanctions in that profile and adds them to the result set (if not present).
+    This ensures that if we find "El Chapo", we return ALL his linked records (UN, MEX, SAT).
+    """
+    final_results = []
+    seen_ids = set()
+    
+    profile_ids_to_fetch = set()
+    
+    # First pass: collect results and profile IDs
+    for r in results:
+        if r.id not in seen_ids:
+            final_results.append(r)
+            seen_ids.add(r.id)
+            if r.profile_id:
+                profile_ids_to_fetch.add(r.profile_id)
+                
+    if not profile_ids_to_fetch:
+        return final_results
+        
+    # Fetch all siblings
+    stmt = select(Sanction).filter(Sanction.profile_id.in_(profile_ids_to_fetch))
+    res = await db.execute(stmt)
+    siblings = res.scalars().all()
+    
+    for s in siblings:
+        if s.id not in seen_ids:
+            final_results.append(s)
+            seen_ids.add(s.id)
+            
+    return final_results

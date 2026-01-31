@@ -1,12 +1,19 @@
-from sqlalchemy import Column, Integer, String, Date, JSON, Text
+from sqlalchemy import Column, Integer, String, Date, JSON, Text, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from app.db.base import Base
 
 class Sanction(Base):
     id = Column(Integer, primary_key=True, index=True)
     entity_name = Column(String, index=True) # Mapped from FIRST_NAME + SECOND_NAME etc
     
+    # Entity Clustering
+    profile_id = Column(UUID(as_uuid=True), ForeignKey("entity_profile.id"), nullable=True, index=True)
+    # relationship could be added if needed: profile = relationship("EntityProfile", backref="sanctions")
+    
     # XML Specific Fields
     data_id = Column(String, unique=True, index=True, nullable=True) # DATAID
+    rfc = Column(String, index=True, nullable=True) # SAT RFC
     un_list_type = Column(String, index=True, nullable=True) # UN_LIST_TYPE
     reference_number = Column(String, index=True, nullable=True) # REFERENCE_NUMBER
     listed_on = Column(Date, nullable=True) # LISTED_ON
