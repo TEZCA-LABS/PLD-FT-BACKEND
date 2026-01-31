@@ -121,3 +121,21 @@ async def delete_user_endpoint(
         
     user = await delete_user(db, user_id=user_id)
     return user
+
+@router.get("/{user_id}", response_model=User)
+async def read_user_by_id(
+    user_id: int,
+    current_user: User = Depends(deps.get_current_active_privileged_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """
+    Get a specific user by id.
+    Only Admins and Auditors can view specific user details.
+    """
+    user = await get_user(db, user_id=user_id)
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="The user with this id does not exist in the system",
+        )
+    return user
