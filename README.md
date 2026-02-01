@@ -43,6 +43,8 @@ El sistema opera bajo un modelo de **Arquitectura Limpia (Clean Architecture)** 
 2.  **Capa de Servicios (Business Logic)**: Contiene la lógica de negocio pura.
     *   **ETL (Extract, Transform, Load)**: Orquestado por **Celery** y **Redis**. Maneja tareas asíncronas pesadas como el web scraping y la normalización de datos para no bloquear el hilo principal de la API.
     *   **RAG (Retrieval-Augmented Generation)**: Utiliza **LangChain** para orquestar la interacción entre la base de datos vectorial y el LLM (OpenAI), permitiendo búsquedas semánticas y generación de análisis contextuales.
+    *   **Entity Resolution**: Módulo de agrupamiento inteligente que identifica y unifica registros duplicados o variantes de la misma persona (ej. "J. Doe" vs "John Doe") utilizando algoritmos de similitud y reglas de negocio.
+    *   **Audit Logs**: Sistema de registro inmutable que traza todas las acciones críticas (búsquedas, modificaciones de usuarios), garantizando la trazabilidad y el no repudio para cumplimiento normativo.
 3.  **Capa de Persistencia**:
     *   **PostgreSQL**: Base de datos relacional principal.
     *   **pgvector**: Extensión de PostgreSQL que permite almacenar y consultar embeddings vectoriales dentro de la misma base de datos relacional, simplificando la infraestructura al evitar una base de datos vectorial separada.
@@ -140,9 +142,27 @@ El proyecto incluye una serie de scripts de utilidad en el directorio `scripts/`
     CREATE EXTENSION IF NOT EXISTS vector;
     ```
 
+*   **Sincronización SAT (Art. 69-B)**:
+    ```bash
+    python scripts/trigger_sat_sync.py
+    ```
+    Descarga y procesa la lista oficial de contribuyentes incumplidos (Listas Negras del SAT Art. 69-B) y actualiza la base de datos local.
+
+*   **Resolución de Entidades (Clustering)**:
+    ```bash
+    python scripts/trigger_clustering.py
+    ```
+    Ejecuta el proceso de desambiguación y agrupación de entidades sancionadas para unificar perfiles.
+
+*   **Mantenimiento de Embeddings**:
+    ```bash
+    python scripts/backfill_embeddings.py
+    ```
+    Genera o actualiza los vectores semánticos para los registros que aún no los tienen, asegurando que sean buscables por el motor de IA.
+
 ---
 
-## 8. API de Búsqueda Inteligente
+## 7. API de Búsqueda Inteligente
 
 El sistema expone un endpoint unificado para búsqueda de sanciones:
 
@@ -151,9 +171,16 @@ El sistema expone un endpoint unificado para búsqueda de sanciones:
 ### Estrategia de Búsqueda (3 Capas)
 1.  **Exacta**: Coincidencia directa con `ILIKE`.
 2.  **Difusa (Fuzzy)**: Utiliza trigramas (`pg_trgm`) para tolerar errores tipográficos (ej. "Gomez" vs "Gomes").
-3.  **Vectorial (Semántica)**: Utiliza embeddings de OpenAI y `pgvector` para encontrar coincidencias conceptuales o variaciones complejas. *Requiere configurar `OPENAI_API_KEY`*.
+### 3. Vectorial (Semántica): Utiliza embeddings de OpenAI y `pgvector` para encontrar coincidencias conceptuales o variaciones complejas. *Requiere configurar `OPENAI_API_KEY`*.
 
-### 7. Despliegue y Ejecución con Docker
+## 8. Endpoints Adicionales
+
+Además de la búsqueda, el sistema ofrece endpoints para gestión y auditoría:
+
+*   **Auditoría (`/api/v1/audit-logs`)**: Permite a los administradores consultar el historial de acciones.
+*   **Entidades (`/api/v1/entities`)**: Gestión CRUD de entidades y disparadores manuales para su procesamiento y vectorización.
+
+## 9. Despliegue y Ejecución con Docker
 
 El sistema está completamente contenerizado. A continuación se detallan los comandos para la gestión del ciclo de vida de los contenedores.
 
