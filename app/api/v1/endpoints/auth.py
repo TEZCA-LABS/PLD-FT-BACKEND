@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import security
 from app.core.config import settings
 from app.db.session import get_db
+from app.api import deps
+from app.schemas.user_schema import User
 # In a real app, you would have a CRUD service for users
 # from app.crud import user as crud_user
 
@@ -37,3 +39,12 @@ async def login_access_token(
         ),
         "token_type": "bearer",
     }
+
+@router.get("/me", response_model=User)
+async def read_users_me(
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    """
+    Get current user.
+    """
+    return current_user
