@@ -1,10 +1,12 @@
 from typing import Any, List
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.schemas.rag_schema import AIEventRequest
 
 from app.api import deps
 from app.services.audit_service import get_audit_logs
 from app.models.user import User
+from app.models.audit_log import AuditLog as AuditLogModel
 
 from app.schemas.audit_log_schema import AuditLog
 
@@ -23,3 +25,20 @@ async def read_audit_logs(
     """
     logs = await get_audit_logs(db, skip=skip, limit=limit)
     return logs
+
+
+@router.post("/ai-events", response_model=AuditLog, status_code=201)
+async def create_ai_event(
+    payload: AIEventRequest,
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    event = AuditLogModel(
+        user_id=current_user.id,
+        action=f"AI_{payload.event_type.upper()}",
+        details={"session_id": payload.session_id, **payload.metadata},
+    )
+    db.add(event)
+    await db.commit()
+    await db.refresh(event)
+    return event
