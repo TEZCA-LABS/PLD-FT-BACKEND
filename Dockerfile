@@ -1,5 +1,5 @@
 # Stage 1: Builder
-FROM python:3.11-slim as builder
+FROM python:3.11.8-slim as builder
 
 WORKDIR /app
 
@@ -23,7 +23,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # Stage 2: Runtime
-FROM python:3.11-slim
+FROM python:3.11.8-slim
+
+# Add metadata labels
+LABEL maintainer="PLD-FT Team"
+LABEL version="1.0.0"
+LABEL description="PLD-FT Backend Service"
 
 WORKDIR /app
 
@@ -32,6 +37,9 @@ ENV PYTHONUNBUFFERED=1
 
 # Create a non-root user for security
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+
+# Install curl for health checks
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
 # Copy installed python dependencies from the builder stage
 COPY --from=builder /install /usr/local
