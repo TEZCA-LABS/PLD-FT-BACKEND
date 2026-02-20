@@ -1,21 +1,64 @@
 # Documentación Técnica: Arquitectura Backend PLD/FT
 
-**Versión:** 1.0
-**Fecha:** 13 de Diciembre, 2025
+**Versión:** 1.1  
+**Fecha:** 13 de Diciembre, 2025 | **Actualizado:** 20 de Febrero, 2026
 
 ---
 
-## 1. Resumen Ejecutivo
+## Índice Rápido
+1. [Resumen Ejecutivo](#resumen-ejecutivo)
+2. [Deployment Rápido](#deployment-rápido)
+3. [Arquitectura del Sistema](#arquitectura-del-sistema)
+4. [Guía Completa de Despliegue](#guía-completa-de-despliegue)
+
+---
+
+## Resumen Ejecutivo
 
 Este documento detalla la arquitectura, decisiones de diseño y protocolos de implementación del sistema Backend para la Prevención de Lavado de Dinero y Financiamiento al Terrorismo (PLD/FT). El sistema está diseñado como una solución híbrida que integra procesamiento transaccional tradicional con capacidades avanzadas de Inteligencia Artificial (RAG - Retrieval-Augmented Generation) para el análisis de entidades y sanciones.
 
-## 2. Arquitectura del Sistema
+---
+
+## Deployment Rápido
+
+### Primeros pasos (5 minutos)
+
+```bash
+# 1. Clone el repositorio
+git clone <repo-url>
+cd PLD-FT-BACKEND
+
+# 2. Configure variables de entorno
+cp .env.example .env
+# Editar .env con valores reales (API keys, credenciales, etc.)
+
+# 3. Inicie los servicios
+docker-compose up -d --build
+
+# 4. Aplique las migraciones
+docker-compose exec backend alembic upgrade head
+
+# 5. Opcionalmente, cargue datos de prueba
+docker-compose exec backend python scripts/seed_database.py
+
+# 6. Verifique que está running
+curl http://localhost:8000/health
+```
+
+### Documentos Importantes
+
+- **[DEPLOYMENT_ANALYSIS.md](docs/DEPLOYMENT_ANALYSIS.md)** - Análisis detallado de problemas y soluciones
+- **[.env.example](.env.example)** - Template de variables de entorno (REQUIERE CUSTOMIZACIÓN)
+- **[scripts/deploy.sh](scripts/deploy.sh)** - Automated deployment con backups y rollback
+- **[scripts/rollback.sh](scripts/rollback.sh)** - Emergency rollback procedure
+
+---
+
+## Arquitectura del Sistema
 
 El sistema sigue un patrón de **Arquitectura Limpia Modular (Modular Clean Architecture)**, priorizando la separación de responsabilidades, la escalabilidad y la mantenibilidad.
 
-### 2.1 Diagrama de Componentes
-
-### 2.1 Descripción Arquitectónica General
+### Descripción Arquitectónica General
 
 El sistema opera bajo un modelo de **Arquitectura Limpia (Clean Architecture)** adaptada a un entorno de microservicios híbrido. El diseño se centra en la independencia de los componentes, permitiendo que la lógica de negocio (reglas PLD/FT) evolucione sin verse afectada por cambios en la interfaz de usuario o en los proveedores de infraestructura (como la base de datos o APIs externas).
 
@@ -104,65 +147,275 @@ Para mantener la integridad arquitectónica, todo nuevo desarrollo debe seguir e
 *   **Asincronía**: Preferir siempre `async def` para endpoints y operaciones de I/O.
 *   **Inyección de Dependencias**: Utilizar el sistema de DI de FastAPI para sesiones de base de datos y autenticación.
 
-### 6. Scripts Operativos
+### 6. Scripts Operativos y CLI Unificado
 
-El proyecto incluye una serie de scripts de utilidad en el directorio `scripts/`. Se deben ejecutar desde la raíz del proyecto para que las importaciones funcionen correctamente.
+El proyecto utiliza un **CLI centralizado** (`scripts/cli.py`) para todas las operaciones de mantenimiento, sincronización, verificación y administración. Todos los comandos se ejecutan con:
 
-*   **Sincronización Manual (PLD/FT)**:
-    ```bash
-    python scripts/trigger_sync.py
-    ```
-    Desencadena manualmente la descarga y sincronización de las listas de sanciones (ONU y México). Requiere que Redis esté corriendo localmente o configurar `REDIS_URL`.
+```bash
+docker-compose exec backend python -m scripts.cli [command] [subcommand] [options]
+```
 
-*   **Verificación de Usuarios**:
-    ```bash
-    python scripts/verify_users.py
-    ```
-    Crea un usuario de prueba, lista usuarios y verifica la eliminación. Útil para smoke testing de la base de datos.
-    
-*   **Reset Password**:
-    ```bash
-    python scripts/reset_password.py <email> <new_password>
-    ```
-    Permite restablecer la contraseña de un usuario manualmente si se tiene acceso al servidor.
+#### 6.1 Sincronización de Datos (data-sync)
 
-*   **Verificación de Búsqueda**:
-    ```bash
-    python scripts/verify_search.py
-    ```
-    Prueba la funcionalidad de búsqueda en la tabla de sanciones.
+```bash
+# Sincronizar SAT 69-B (Contribuyentes Incumplidos)
+docker-compose exec backend python -m scripts.cli data-sync sat
 
-*   **Verificación de Búsqueda Híbrida (Nueva)**:
-    ```bash
-    python scripts/verify_hybrid_search.py
-    ```
-    Prueba la búsqueda exacta, difusa (fuzzy) y vectorial. Requiere habilitar extensiones en la BD:
-    ```sql
-    CREATE EXTENSION IF NOT EXISTS pg_trgm;
-    CREATE EXTENSION IF NOT EXISTS vector;
-    ```
+# Sincronizar sanciones UN + México vía Celery workers
+docker-compose exec backend python -m scripts.cli data-sync sanctions
 
-*   **Sincronización SAT (Art. 69-B)**:
-    ```bash
-    python scripts/trigger_sat_sync.py
-    ```
-    Descarga y procesa la lista oficial de contribuyentes incumplidos (Listas Negras del SAT Art. 69-B) y actualiza la base de datos local.
+# Sincronizar solo UN o MEX
+docker-compose exec backend python -m scripts.cli data-sync sanctions --source un
+docker-compose exec backend python -m scripts.cli data-sync sanctions --source mex
 
-*   **Resolución de Entidades (Clustering)**:
-    ```bash
-    python scripts/trigger_clustering.py
-    ```
-    Ejecuta el proceso de desambiguación y agrupación de entidades sancionadas para unificar perfiles.
+# Clustering de entidades (desambiguación y unificación)
+docker-compose exec backend python -m scripts.cli data-sync cluster
+```
 
-*   **Mantenimiento de Embeddings**:
-    ```bash
-    python scripts/backfill_embeddings.py
-    ```
-    Genera o actualiza los vectores semánticos para los registros que aún no los tienen, asegurando que sean buscables por el motor de IA.
+#### 6.2 Mantenimiento de Base de Datos (maint)
+
+```bash
+# Rellenar embeddings faltantes (vectorización de sanciones)
+docker-compose exec backend python -m scripts.cli maint embeddings
+docker-compose exec backend python -m scripts.cli maint embeddings --limit 100  # Procesar solo 100 registros
+docker-compose exec backend python -m scripts.cli maint embeddings --batch-size 20  # Commit cada 20 registros
+
+# Actualizar roles NULL de usuarios a 'consultant'
+docker-compose exec backend python -m scripts.cli maint roles
+
+# Limpiar tabla de versiones de Alembic (antes de re-estampar migraciones)
+docker-compose exec backend python -m scripts.cli maint alembic-clean
+```
+
+#### 6.3 Verificación de Integridad (verify)
+
+```bash
+# Verificar operaciones CRUD de usuarios
+docker-compose exec backend python -m scripts.cli verify users
+
+# Verificar búsqueda exacta en sanciones
+docker-compose exec backend python -m scripts.cli verify search
+
+# Verificar estado de embeddings (con sample)
+docker-compose exec backend python -m scripts.cli verify embeddings
+
+# Verificar embeddings de registros específicos
+docker-compose exec backend python -m scripts.cli verify embeddings --id 1454 --id 1455
+```
+
+#### 6.4 Operaciones Administrativas (admin)
+
+```bash
+# Resetear contraseña de usuario
+docker-compose exec backend python -m scripts.cli admin reset-password correo@empresa.com nueva_contraseña
+```
+
+#### 6.5 Ayuda y Comandos Disponibles
+
+```bash
+# Ver todos los comandos disponibles
+docker-compose exec backend python -m scripts.cli --help
+
+# Ver subcomandos de una categoría
+docker-compose exec backend python -m scripts.cli data-sync --help
+docker-compose exec backend python -m scripts.cli maint --help
+docker-compose exec backend python -m scripts.cli verify --help
+docker-compose exec backend python -m scripts.cli admin --help
+```
+
+#### 6.6 Scripts Individuales (Deprecated)
+
+Los scripts individuales en `scripts/` aún existen por compatibilidad, pero se recomienda usar el CLI unificado:
+
+| Script Original | Comando Nuevo |
+|---|---|
+| `trigger_sat_sync.py` | `data-sync sat` |
+| `trigger_sync.py` | `data-sync sanctions` |
+| `trigger_clustering.py` | `data-sync cluster` |
+| `backfill_embeddings.py` | `maint embeddings` |
+| `backfill_roles.py` | `maint roles` |
+| `fix_alembic.py` | `maint alembic-clean` |
+| `verify_users.py` | `verify users` |
+| `verify_search.py` | `verify search` |
+| `reset_password.py` | `admin reset-password` |
 
 ---
 
-## 7. API de Búsqueda Inteligente
+---
+
+## Guía Completa de Despliegue
+
+### Ambiente de Pre-Producción
+
+La guía anterior (`docker-compose up`) es adecuada para **desarrollo**. Para **staging y producción**, usar:
+
+```bash
+# Despliegue completamente automatizado con backups
+bash scripts/deploy.sh staging
+# o
+bash scripts/deploy.sh production
+```
+
+**¿Qué hace `deploy.sh`?**
+1. Valida prerequisitos (docker, git, .env)
+2. Realiza backup automático de BD
+3. Actualiza código desde git
+4. Construye imágenes Docker con cambios
+5. Ejecuta migraciones Alembic
+6. Inicia servicios con health checks
+7. Valida endpoints de API
+8. Automáticamente revierte en caso de fallo
+
+### Procedimiento de Rollback de Emergencia
+
+Si una actualización falla, revertir usando:
+
+```bash
+# Rollback de BD a backup anterior
+bash scripts/rollback.sh backups/pld_backend_20260220_040000.sql
+
+# Rollback de código a commit anterior
+bash scripts/rollback.sh HEAD~1
+```
+
+### Inicializar con Datos de Prueba
+
+Después del primer despliegue:
+
+```bash
+docker-compose exec backend python scripts/seed_database.py
+```
+
+Usuarios de prueba creados:
+- `admin@example.com` / `password123` (superuser)
+- `analyst@example.com` / `password456` (consultant)
+- `auditor@example.com` / `password789` (auditor)
+
+**⚠️  Cambiar credenciales inmediatamente en producción**
+
+### Variables de Entorno Requeridas
+
+Ver [.env.example](.env.example) para la lista completa. Como mínimo:
+
+```bash
+# Seguridad
+SECRET_KEY=your-random-secret-here
+OPENAI_API_KEY=sk-your-key-here
+
+# Base de Datos
+POSTGRES_PASSWORD=your-secure-password
+
+# Opcional - Frontend CORS
+BACKEND_CORS_ORIGINS=http://localhost:3000,https://frontend.example.com
+```
+
+### Monitoreo Post-Despliegue
+
+```bash
+# Ver logs en tiempo real
+docker-compose logs -f backend
+
+# Verificar salud de servicios
+docker-compose ps
+
+# Teste de humo (smoke test)
+curl http://localhost:8000/health
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/audit-logs
+```
+
+---
+
+## 7. Gestión de Migraciones de Base de Datos (Alembic)
+
+Las migraciones schema se gestionan con **Alembic**, garantizando versionado y reproducibilidad del estado de la BD.
+
+### 7.1 Primeras Migraciones (Startup)
+
+Cuando inicies por primera vez o después de resetear:
+
+```bash
+# Aplicar todas las migraciones
+docker-compose exec backend alembic upgrade head
+
+# Si hay error de "migración no encontrada", limpiar primero:
+docker-compose exec backend python -m scripts.cli maint alembic-clean
+docker-compose exec backend alembic upgrade head
+```
+
+### 7.2 Crear Nueva Migración (Desarrollo)
+
+```bash
+# Después de modificar modelos en `app/models/`
+docker-compose exec backend alembic revision --autogenerate -m "descripcion de cambios"
+
+# Aplicar la migración
+docker-compose exec backend alembic upgrade head
+```
+
+### 7.3 Historial y Estado de Migraciones
+
+```bash
+# Ver migración actual
+docker-compose exec backend alembic current
+
+# Ver historial de migraciones
+docker-compose exec backend alembic history
+```
+
+### 7.4 Problemas Comunes
+
+| Problema | Solución |
+|----------|----------|
+| `relation already exists` | `docker-compose exec backend python -m scripts.cli maint alembic-clean` + `alembic upgrade head` |
+| `Can't locate revision` | Tabla de migraciones corrupta, usar `alembic-clean` |
+| Migraciones locales no se aplican | Recrear volumen: `docker-compose down -v` + `docker-compose up -d --build` |
+
+---
+
+## 8. AI Chat y Módulo de Inteligencia
+
+El sistema incluye un módulo RAG (Retrieval-Augmented Generation) para análisis conversacional de entidades y sanciones:
+
+### 8.1 Endpoints de Chat IA Disponibles
+
+- `POST /api/v1/intelligence/sessions` - Crear nueva sesión de investigación
+- `GET /api/v1/intelligence/sessions` - Listar sesiones del usuario
+- `GET /api/v1/intelligence/sessions/{session_id}/messages` - Historial de mensajes
+- `POST /api/v1/intelligence/sessions/{session_id}/messages` - Enviar prompt y recibir análisis
+- `POST /api/v1/intelligence/sessions/{session_id}/attachments` - Adjuntar evidencia
+- `GET /api/v1/intelligence/sessions/{session_id}/attachments` - Listar evidencias
+- `POST /api/v1/intelligence/sessions/{session_id}/export` - Exportar expediente (PDF/JSON)
+- `POST /api/v1/audit/ai-events` - Registrar evento IA para auditoría
+
+### 8.2 Formato de Respuesta de Análisis
+
+```json
+{
+  "message_id": 8,
+  "analysis": "Análisis detallado generado por IA...",
+  "context": {
+    "source": {
+      "name": "Lista OFAC SDN",
+      "organization": "OFAC",
+      "snippet": "Información relevante extraída"
+    },
+    "related_entities": [
+      {"name": "Entity A", "relationship": "asociada", "type": "company"}
+    ]
+  },
+  "usage": {
+    "prompt_tokens": 1200,
+    "completion_tokens": 350,
+    "latency_ms": 2100
+  },
+  "model_version": "gpt-4-turbo",
+  "created_at": "2026-02-19T16:05:10Z"
+}
+```
+
+---
+
+## 9. API de Búsqueda Inteligente
 
 El sistema expone un endpoint unificado para búsqueda de sanciones:
 
@@ -173,14 +426,14 @@ El sistema expone un endpoint unificado para búsqueda de sanciones:
 2.  **Difusa (Fuzzy)**: Utiliza trigramas (`pg_trgm`) para tolerar errores tipográficos (ej. "Gomez" vs "Gomes").
 ### 3. Vectorial (Semántica): Utiliza embeddings de OpenAI y `pgvector` para encontrar coincidencias conceptuales o variaciones complejas. *Requiere configurar `OPENAI_API_KEY`*.
 
-## 8. Endpoints Adicionales
+## 10. Endpoints Adicionales
 
 Además de la búsqueda, el sistema ofrece endpoints para gestión y auditoría:
 
 *   **Auditoría (`/api/v1/audit-logs`)**: Permite a los administradores consultar el historial de acciones.
 *   **Entidades (`/api/v1/entities`)**: Gestión CRUD de entidades y disparadores manuales para su procesamiento y vectorización.
 
-## 9. Despliegue y Ejecución con Docker
+## 11. Despliegue y Ejecución con Docker
 
 El sistema está completamente contenerizado. A continuación se detallan los comandos para la gestión del ciclo de vida de los contenedores.
 

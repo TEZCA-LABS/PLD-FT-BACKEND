@@ -63,10 +63,20 @@ Authorization: Bearer <access_token>
 | DELETE | `/api/v1/users/{user_id}` | Sí (superuser/admin) | Eliminar usuario |
 | GET | `/api/v1/entities/` | No | Listar entidades |
 | POST | `/api/v1/entities/` | No | Crear entidad (dispara ETL async) |
-| POST | `/api/v1/intelligence/analyze-entity` | No | Análisis RAG por consulta |
+| POST | `/api/v1/intelligence/analyze-entity` | Sí (usuario activo) | Análisis RAG por consulta (legacy compatible) |
+| GET | `/api/v1/intelligence/sessions` | Sí (usuario activo) | Listar sesiones de chat IA |
+| POST | `/api/v1/intelligence/sessions` | Sí (usuario activo) | Crear sesión de investigación |
+| PATCH | `/api/v1/intelligence/sessions/{session_id}` | Sí (owner/admin/auditor/superuser) | Actualizar metadatos de sesión |
+| DELETE | `/api/v1/intelligence/sessions/{session_id}` | Sí (owner/admin/auditor/superuser) | Archivado lógico de sesión |
+| GET | `/api/v1/intelligence/sessions/{session_id}/messages` | Sí (owner/admin/auditor/superuser) | Historial de mensajes |
+| POST | `/api/v1/intelligence/sessions/{session_id}/messages` | Sí (owner/admin/auditor/superuser) | Enviar prompt y persistir respuesta IA |
+| POST | `/api/v1/intelligence/sessions/{session_id}/attachments` | Sí (owner/admin/auditor/superuser) | Cargar evidencia al caso |
+| GET | `/api/v1/intelligence/sessions/{session_id}/attachments` | Sí (owner/admin/auditor/superuser) | Listar evidencias del caso |
+| POST | `/api/v1/intelligence/sessions/{session_id}/export` | Sí (owner/admin/auditor/superuser) | Exportar expediente (PDF/JSON) |
 | POST | `/api/v1/sanctions/upload-xml` | Sí (superuser/admin) | Cargar XML de sanciones |
 | GET | `/api/v1/search/sanctions` | Sí (usuario activo) | Búsqueda híbrida en sanciones |
 | GET | `/api/v1/audit/history` | Sí (admin/auditor/superuser) | Historial de auditoría |
+| POST | `/api/v1/audit/ai-events` | Sí (usuario activo) | Registrar evento IA explícito |
 
 ---
 
@@ -307,7 +317,9 @@ Respuesta 200 (`Entity`):
 
 ### POST `/api/v1/intelligence/analyze-entity`
 
-Descripción: consulta en lenguaje natural para análisis de listas de sanciones.
+Descripción: consulta en lenguaje natural para análisis de listas de sanciones (compatibilidad legacy).
+
+Auth: usuario activo.
 
 Body (`AnalysisRequest`):
 
@@ -321,9 +333,157 @@ Respuesta 200 (`AnalysisResponse`):
 
 ```json
 {
-  "analysis": "Resultado del análisis generado por la cadena RAG"
+  "analysis": "Resultado del análisis generado por la cadena RAG",
+  "context": {
+    "source": {
+      "name": "Entidad Demo",
+      "organization": "UN",
+      "date": null,
+      "snippet": "Detalle relevante",
+      "url": null
+    },
+    "related_entities": [
+      {
+        "name": "Entidad Demo",
+        "relationship": "posible coincidencia",
+        "type": "entity"
+      }
+    ]
+  },
+  "usage": {
+    "prompt_tokens": null,
+    "completion_tokens": null,
+    "latency_ms": null
+  },
+  "model_version": "gpt-4-turbo"
 }
 ```
+
+### GET `/api/v1/intelligence/sessions`
+
+Descripción: obtiene sesiones del usuario autenticado (admin/auditor/superuser puede ver todas).
+
+Query params:
+
+- `skip` (int, default `0`)
+- `limit` (int, default `20`, máximo `100`)
+- `status` (opcional: `open | closed | archived`)
+
+### POST `/api/v1/intelligence/sessions`
+
+Descripción: crea una sesión de investigación.
+
+Body:
+
+```json
+{
+  "title": "Investigación cliente ACME",
+  "initial_context": {
+    "entity_id": "ent_991",
+    "search_query": "ACME Holdings"
+  }
+}
+```
+
+Respuesta 201:
+
+```json
+{
+  "id": 124,
+  "title": "Investigación cliente ACME",
+  "status": "open",
+  "created_at": "2026-02-19T16:00:00Z"
+}
+```
+
+### PATCH `/api/v1/intelligence/sessions/{session_id}`
+
+Descripción: actualiza `title` y/o `status` de la sesión.
+
+### DELETE `/api/v1/intelligence/sessions/{session_id}`
+
+Descripción: archivado lógico de la sesión (`status = archived`).
+
+### GET `/api/v1/intelligence/sessions/{session_id}/messages`
+
+Descripción: historial de mensajes persistidos.
+
+Query params: `skip`, `limit`.
+
+### POST `/api/v1/intelligence/sessions/{session_id}/messages`
+
+Descripción: guarda prompt del usuario y respuesta IA persistida.
+
+Body:
+
+```json
+{
+  "query": "Genera resumen ejecutivo para comité de cumplimiento",
+  "options": {
+    "model": "compliance-v4",
+    "temperature": 0.2,
+    "redact_pii": true
+  }
+}
+```
+
+Respuesta 201:
+
+```json
+{
+  "message_id": 8,
+  "analysis": "Resumen ejecutivo...",
+  "context": {
+    "source": {
+      "name": "Lista OFAC SDN",
+      "organization": "OFAC",
+      "date": null,
+      "snippet": "MATCH: ...",
+      "url": null
+    },
+    "related_entities": []
+  },
+  "usage": {
+    "prompt_tokens": null,
+    "completion_tokens": null,
+    "latency_ms": 1800
+  },
+  "model_version": "compliance-v4",
+  "created_at": "2026-02-19T16:05:10Z"
+}
+```
+
+### POST `/api/v1/intelligence/sessions/{session_id}/attachments`
+
+Descripción: sube evidencia para enriquecer el análisis.
+
+Content-Type: `multipart/form-data`.
+
+Campo requerido: `file`.
+
+### GET `/api/v1/intelligence/sessions/{session_id}/attachments`
+
+Descripción: lista archivos asociados a la sesión.
+
+Query params: `skip`, `limit`.
+
+### POST `/api/v1/intelligence/sessions/{session_id}/export`
+
+Descripción: exporta expediente del caso.
+
+Body:
+
+```json
+{
+  "format": "pdf",
+  "include": ["messages", "sources", "entities", "metadata"]
+}
+```
+
+Respuesta:
+
+- `application/pdf` como adjunto, o
+- `application/json` como adjunto.
 
 ---
 
@@ -432,6 +592,26 @@ Respuesta 200 (`AuditLog[]`):
 Errores comunes:
 
 - `403` -> `"Not authorized to view audit logs."`
+
+### POST `/api/v1/audit/ai-events`
+
+Descripción: registra eventos IA de alto valor para trazabilidad.
+
+Auth: usuario activo.
+
+Body:
+
+```json
+{
+  "session_id": 124,
+  "event_type": "analysis_generated",
+  "metadata": {
+    "message_id": 8,
+    "model": "compliance-v4",
+    "pii_redaction": true
+  }
+}
+```
 
 ---
 
