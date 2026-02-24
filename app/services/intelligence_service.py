@@ -17,7 +17,7 @@ from app.models.ai_chat_message import AIChatMessage
 from app.models.ai_chat_session import AIChatSession
 from app.models.user import User
 from app.schemas.rag_schema import AnalysisOptions
-from app.services.rag.chains import get_rag_chain, retrieve_context
+from app.services.rag.chains import get_rag_chain, is_ambiguous_query, retrieve_context
 
 
 def _sanitize_text(text: str) -> str:
@@ -34,24 +34,44 @@ def _redact_pii(text: str) -> str:
 
 def _build_context_payload(context_text: str) -> Dict[str, Any]:
     lines = [line.strip() for line in context_text.splitlines() if line.strip()]
-    source_name = None
-    source_org = None
-    snippet = None
-    related_entities: List[Dict[str, str]] = []
+    parsed_entries: List[Dict[str, Optional[str]]] = []
+    current_entry: Dict[str, Optional[str]] = {"name": None, "source": None, "detail": None}
 
     for line in lines:
-        if line.lower().startswith("nombre:") and not source_name:
-            source_name = line.split(":", 1)[1].strip()
-        if line.lower().startswith("fuente:") and not source_org:
-            source_org = line.split(":", 1)[1].strip()
-        if line.lower().startswith("detalle:") and not snippet:
-            snippet = line.split(":", 1)[1].strip()
+        lowered = line.lower()
+        if lowered.startswith("nombre:"):
+            # New block starts when we already had a name collected.
+            if current_entry.get("name"):
+                parsed_entries.append(current_entry)
+                current_entry = {"name": None, "source": None, "detail": None}
+            current_entry["name"] = line.split(":", 1)[1].strip()
+        elif lowered.startswith("fuente:"):
+            current_entry["source"] = line.split(":", 1)[1].strip()
+        elif lowered.startswith("detalle:"):
+            current_entry["detail"] = line.split(":", 1)[1].strip()
 
-    if source_name:
+    if current_entry.get("name"):
+        parsed_entries.append(current_entry)
+
+    source_name = parsed_entries[0]["name"] if parsed_entries else None
+    source_org = parsed_entries[0]["source"] if parsed_entries else None
+    snippet = parsed_entries[0]["detail"] if parsed_entries else None
+
+    related_entities: List[Dict[str, str]] = []
+    seen_names = set()
+    for entry in parsed_entries[:5]:
+        name = (entry.get("name") or "").strip()
+        source = (entry.get("source") or "").strip()
+        if not name or name.lower() in seen_names:
+            continue
+        seen_names.add(name.lower())
+        relation = "top match"
+        if source:
+            relation = f"top match ({source})"
         related_entities.append(
             {
-                "name": source_name,
-                "relationship": "posible coincidencia",
+                "name": name,
+                "relationship": relation,
                 "type": "entity",
             }
         )
@@ -219,6 +239,15 @@ async def create_message_and_analysis(
 
     chain = get_rag_chain()
     response = await chain.ainvoke({"context": context_text, "question": prompt})
+
+    if is_ambiguous_query(prompt, context_text):
+        response = (
+            f"{response}\n\n"
+            "Sugerencia para mejorar la búsqueda: incluye un identificador único. "
+            "Ejemplo: 'Juan Carlos Araiza Arambula RFC AAAJ830204PA9 en SAT 69-B' "
+            "o 'Juan Perez fuente MEX_SANCIONADOS referencia EXP-12345'."
+        )
+
     latency_ms = int((time.perf_counter() - start_time) * 1000)
 
     usage = {

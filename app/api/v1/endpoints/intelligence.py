@@ -37,7 +37,7 @@ from app.services.intelligence_service import (
     list_sessions,
     update_session,
 )
-from app.services.rag.chains import get_rag_chain, retrieve_context
+from app.services.rag.chains import get_rag_chain, is_ambiguous_query, retrieve_context
 
 router = APIRouter()
 
@@ -55,6 +55,14 @@ async def analyze_entity(
     context = await retrieve_context(request.query)
     chain = get_rag_chain()
     response = await chain.ainvoke({"context": context, "question": request.query})
+
+    if is_ambiguous_query(request.query, context):
+        response = (
+            f"{response}\n\n"
+            "Sugerencia para mejorar la búsqueda: incluye un identificador único. "
+            "Ejemplo: 'Juan Carlos Araiza Arambula RFC AAAJ830204PA9 en SAT 69-B' "
+            "o 'Juan Perez fuente MEX_SANCIONADOS referencia EXP-12345'."
+        )
 
     try:
         await log_search(
