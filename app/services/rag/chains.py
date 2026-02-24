@@ -28,14 +28,58 @@ def _normalize_search_query(question: str) -> str:
         return " ".join(filtered[:3])
     return question.strip()
 
+
+def _extract_sat_status(program: str, remarks: str) -> str:
+    status_candidates = [program or "", remarks or ""]
+    lowered = " ".join(status_candidates).lower()
+
+    if "definit" in lowered:
+        return "Definitivo"
+    if "presunt" in lowered:
+        return "Presunto"
+    if "desvirt" in lowered:
+        return "Desvirtuado"
+    if "sentencia" in lowered and "favorable" in lowered:
+        return "Sentencia favorable"
+    return "No identificado"
+
+
+def _derive_risk_level(source: str, program: str, remarks: str) -> str:
+    source_name = (source or "").upper()
+    status = _extract_sat_status(program, remarks).lower()
+
+    if source_name == "SAT_69B":
+        if "definit" in status:
+            return "alto"
+        if "presunt" in status:
+            return "medio"
+        if "desvirt" in status or "sentencia" in status:
+            return "bajo"
+        return "indeterminado"
+
+    if source_name in {"UN_CONSOLIDATED", "MEX_SANCIONADOS"}:
+        return "alto"
+
+    return "indeterminado"
+
 # Prompt designed to reduce hallucinations
 RAG_PROMPT = """
-Eres un analista experto en PLD (Prevención de Lavado de Dinero).
-Responde la consulta basándote ÚNICAMENTE en el siguiente contexto proporcionado.
-Si la información no está en el contexto, indica que no hay registros.
-Si la consulta es ambigua (por ejemplo nombres comunes como "Juan") o existen múltiples coincidencias,
-explica brevemente la ambigüedad y agrega al final un ejemplo concreto de búsqueda mejor formulada
-incluyendo identificadores (ej. RFC, fuente o referencia).
+Eres un analista experto en PLD/FT y cumplimiento financiero.
+
+Responde la consulta basándote ÚNICAMENTE en el contexto proporcionado.
+No inventes hechos, causas legales ni identificadores.
+Si falta información, dilo explícitamente.
+
+Objetivo de salida (en español, máximo 220 palabras):
+1) Resultado de screening (coincidencia probable / no concluyente / sin coincidencias).
+2) Fundamentación factual por fuente (ONU, MEX_SANCIONADOS, SAT_69B) indicando estatus y detalle relevante.
+3) Evaluación de riesgo breve (alto/medio/bajo) con cautela si hay ambigüedad.
+4) Fuentes consultadas con evidencia, usando el formato: [FUENTE|EVIDENCIA].
+
+Reglas críticas:
+- Si la consulta es ambigua o hay homónimos, indícalo y solicita identificador único (RFC, referencia, fecha de nacimiento).
+- Para SAT 69-B, distingue explícitamente Presunto, Definitivo, Desvirtuado y Sentencia favorable.
+- No afirmes delitos; limita la redacción a estatus administrativo y hallazgos del contexto.
 
 Contexto:
 {context}
@@ -63,13 +107,26 @@ async def retrieve_context(question: str):
                 details.append(f"Referencia: {sanction.reference_number}")
             if sanction.rfc:
                 details.append(f"RFC: {sanction.rfc}")
+            if sanction.listed_on:
+                details.append(f"Publicado: {sanction.listed_on}")
             if sanction.remarks:
                 details.append(f"Observaciones: {str(sanction.remarks)[:280]}")
+
+            sat_status = _extract_sat_status(str(sanction.program or ""), str(sanction.remarks or ""))
+            risk_level = _derive_risk_level(
+                source=str(sanction.source or ""),
+                program=str(sanction.program or ""),
+                remarks=str(sanction.remarks or ""),
+            )
+            evidence_id = sanction.reference_number or sanction.rfc or sanction.data_id or "N/A"
 
             detail_text = " | ".join(details) if details else "Sin detalle adicional disponible."
             context_chunks.append(
                 f"Nombre: {sanction.entity_name}\n"
                 f"Fuente: {sanction.source}\n"
+                f"Estado: {sat_status}\n"
+                f"Riesgo: {risk_level}\n"
+                f"Evidencia: {evidence_id}\n"
                 f"Detalle: {detail_text}"
             )
     except Exception as exc:
@@ -82,6 +139,9 @@ async def retrieve_context(question: str):
             context_chunks.append(
                 f"Nombre: {doc.name}\n"
                 f"Fuente: {doc.source}\n"
+                f"Estado: Documento contextual\n"
+                f"Riesgo: indeterminado\n"
+                f"Evidencia: ENTITY_DOC\n"
                 f"Detalle: {str(doc.content)[:320]}"
             )
     except Exception as exc:

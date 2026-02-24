@@ -1,7 +1,7 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import logging
 import csv
-import io
+import unicodedata
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -10,6 +10,164 @@ from sqlalchemy import delete
 from app.models.sanction import Sanction
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value)
+    return normalized.encode("ascii", "ignore").decode("ascii").lower().strip()
+
+
+def _parse_date_ddmmyyyy(raw: str) -> Optional[datetime.date]:
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    date_candidate = raw.split("-")[0].strip()
+    try:
+        return datetime.strptime(date_candidate, "%d/%m/%Y").date()
+    except ValueError:
+        return None
+
+
+def _find_value(row_map: Dict[str, str], keyword_groups: List[List[str]]) -> str:
+    for keywords in keyword_groups:
+        for key, value in row_map.items():
+            if all(token in key for token in keywords) and value:
+                return value.strip()
+    return ""
+
+
+def _sat_risk_level(status: str) -> str:
+    normalized = _normalize_text(status)
+    if "definit" in normalized:
+        return "alto"
+    if "presunt" in normalized:
+        return "medio"
+    if "desvirt" in normalized or "sentencia" in normalized or "favorable" in normalized:
+        return "bajo"
+    return "indeterminado"
+
+
+def _sat_reference_for_status(status: str, row_map: Dict[str, str]) -> str:
+    normalized = _normalize_text(status)
+
+    if "definit" in normalized:
+        return _find_value(
+            row_map,
+            [
+                ["oficio", "definitiv", "sat"],
+                ["oficio", "definitiv", "dof"],
+            ],
+        )
+    if "presunt" in normalized:
+        return _find_value(
+            row_map,
+            [
+                ["oficio", "presuncion", "sat"],
+                ["oficio", "presuncion", "dof"],
+            ],
+        )
+    if "desvirt" in normalized:
+        return _find_value(
+            row_map,
+            [
+                ["oficio", "desvirtuaron", "sat"],
+                ["oficio", "desvirtuaron", "dof"],
+            ],
+        )
+    if "sentencia" in normalized or "favorable" in normalized:
+        return _find_value(
+            row_map,
+            [
+                ["oficio", "sentencia", "favorable", "sat"],
+                ["oficio", "sentencia", "favorable", "dof"],
+            ],
+        )
+
+    return _find_value(
+        row_map,
+        [
+            ["oficio", "definitiv"],
+            ["oficio", "presuncion"],
+            ["oficio", "desvirtuaron"],
+            ["oficio", "sentencia", "favorable"],
+        ],
+    )
+
+
+def _sat_date_for_status(status: str, row_map: Dict[str, str]) -> Optional[datetime.date]:
+    normalized = _normalize_text(status)
+
+    if "definit" in normalized:
+        return _parse_date_ddmmyyyy(
+            _find_value(
+                row_map,
+                [
+                    ["publicacion", "sat", "definitiv"],
+                    ["publicacion", "dof", "definitiv"],
+                ],
+            )
+        )
+    if "presunt" in normalized:
+        return _parse_date_ddmmyyyy(
+            _find_value(
+                row_map,
+                [
+                    ["publicacion", "sat", "presunt"],
+                    ["publicacion", "dof", "presunt"],
+                ],
+            )
+        )
+    if "desvirt" in normalized:
+        return _parse_date_ddmmyyyy(
+            _find_value(
+                row_map,
+                [
+                    ["publicacion", "sat", "desvirtu"],
+                    ["publicacion", "dof", "desvirtu"],
+                ],
+            )
+        )
+    if "sentencia" in normalized or "favorable" in normalized:
+        return _parse_date_ddmmyyyy(
+            _find_value(
+                row_map,
+                [
+                    ["publicacion", "sat", "sentencia", "favorable"],
+                    ["publicacion", "dof", "sentencia", "favorable"],
+                ],
+            )
+        )
+
+    return _parse_date_ddmmyyyy(
+        _find_value(
+            row_map,
+            [
+                ["publicacion", "sat", "definitiv"],
+                ["publicacion", "sat", "presunt"],
+                ["publicacion", "sat", "desvirtu"],
+                ["publicacion", "sat", "sentencia"],
+            ],
+        )
+    )
+
+
+def _build_sat_remarks(status: str, reference_number: str, risk_level: str) -> str:
+    status_clean = status or "No identificado"
+    reference_clean = reference_number or "Sin oficio disponible"
+
+    interpretation = {
+        "alto": "El registro indica publicación definitiva en el procedimiento 69-B; considerar riesgo fiscal y de materialidad elevado.",
+        "medio": "El registro está en etapa presunta; se requiere validación adicional y monitoreo de transición de estatus.",
+        "bajo": "El registro aparece como desvirtuado o con sentencia favorable; riesgo mitigado bajo este artículo.",
+        "indeterminado": "No fue posible inferir una categoría de riesgo a partir del estatus proporcionado.",
+    }.get(risk_level, "")
+
+    return (
+        f"Estatus SAT 69-B: {status_clean}. "
+        f"Nivel de riesgo estimado: {risk_level}. "
+        f"Oficio relacionado: {reference_clean}. "
+        f"Interpretación: {interpretation}"
+    )
 
 def parse_sat_csv(csv_content: bytes) -> List[Dict[str, Any]]:
     """
@@ -20,11 +178,14 @@ def parse_sat_csv(csv_content: bytes) -> List[Dict[str, Any]]:
       - Nombre del Contribuyente -> entity_name
       - Situación del Contribuyente -> remarks / program
     """
-    # Decode latin-1 or utf-8 (SAT often uses latin-1/windows-1252)
+    # Decode latin-1/windows-1252 or utf-8 variants (SAT files are inconsistent)
     try:
-        decoded_content = csv_content.decode('utf-8')
+        decoded_content = csv_content.decode('utf-8-sig')
     except UnicodeDecodeError:
-        decoded_content = csv_content.decode('latin-1')
+        try:
+            decoded_content = csv_content.decode('cp1252')
+        except UnicodeDecodeError:
+            decoded_content = csv_content.decode('latin-1', errors='ignore')
 
     # Read lines
     lines = decoded_content.splitlines()
@@ -51,40 +212,39 @@ def parse_sat_csv(csv_content: bytes) -> List[Dict[str, Any]]:
 
     for row in reader:
         try:
-            rfc = row.get("RFC", "").strip()
-            name = row.get("Nombre del Contribuyente", "").strip()
-            situation = row.get("Situación del Contribuyente", "").strip()
-            
-            # Additional fields if available
-            # "Número de oficio global de presunción"
-            # "Fecha de publicación página SAT presuntos"
+            row_map = {
+                _normalize_text(str(key)): (value or "").strip()
+                for key, value in row.items()
+                if key
+            }
+
+            rfc = _find_value(row_map, [["rfc"]])
+            name = _find_value(row_map, [["nombre", "contribuyente"]])
+            situation = _find_value(row_map, [["situ", "contribuyente"]])
             
             if not rfc or not name:
                 continue
 
+            risk_level = _sat_risk_level(situation)
+            reference_number = _sat_reference_for_status(situation, row_map) or rfc
+            sanction_date = _sat_date_for_status(situation, row_map)
+            remarks = _build_sat_remarks(
+                status=situation,
+                reference_number=reference_number,
+                risk_level=risk_level,
+            )
+
             # Construct data_id
             data_id = f"SAT-69B-{rfc}"
-            
-            # Construct remarks
-            remarks = f"Situación: {situation}."
-            
-            # Dates (SAT format usually DD/MM/YYYY)
-            sanction_date = None
-            date_str = row.get("Fecha de publicación página SAT presuntos", "").strip()
-            if date_str:
-                try:
-                     sanction_date = datetime.strptime(date_str, "%d/%m/%Y").date()
-                except ValueError:
-                    pass
 
             item = {
                 "data_id": data_id,
                 "entity_name": name,
                 "rfc": rfc,
-                "program": "SAT 69-B - Empresas Factureras",
+                "program": f"SAT 69-B - {situation or 'Sin estatus'}",
                 "source": "SAT_69B",
                 "remarks": remarks,
-                "reference_number": rfc, # Use RFC as reference
+                "reference_number": reference_number,
                 "sanction_date": sanction_date,
                 "listed_on": sanction_date,
                 

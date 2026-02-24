@@ -32,19 +32,17 @@ async def analyze_search_results(query: str, results: List[Any]) -> str:
 
         # Create Prompt
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "Eres un Asistente de Cumplimiento Normativo (AI Compliance Assistant) especializado en PLD/FT (Prevención de Lavado de Dinero / Financiamiento al Terrorismo). "
-                       "Tu tarea es analizar los resultados de búsqueda de las siguientes listas de sanciones:\n"
-                       "1. Lista Consolidada del Consejo de Seguridad de las Naciones Unidas (Fuente: UN_CONSOLIDATED)\n"
-                       "2. Lista de Personas Bloqueadas de México (Fuente: MEX_SANCIONADOS)\n"
-                       "3. Lista 69-B del SAT (Empresas Factureras) (Fuente: SAT_69B)\n\n"
-                       "Analiza los resultados proporcionados contra la consulta del usuario."),
+                        ("system", "Eres un Asistente de Cumplimiento Normativo especializado en PLD/FT. "
+                                             "Analiza únicamente los resultados entregados, sin inferir hechos externos ni afirmar delitos. "
+                                             "Distingue el estatus SAT 69-B cuando aparezca (Presunto, Definitivo, Desvirtuado, Sentencia favorable). "
+                                             "Si hay homónimos o falta de identificador, indica que el resultado no es concluyente y solicita RFC o referencia."),
             ("user", "Consulta del Usuario: {query}\n\n"
                      "Resultados de Búsqueda:\n{results}\n\n"
-                     "Por favor, proporciona un resumen conciso en ESPAÑOL.\n"
-                     "1. Indica si hay una coincidencia probable basada en la similitud del nombre y la fuente.\n"
-                     "2. Si hay coincidencias, resalta la más relevante, indicando claramente la fuente (ONU o México) y el programa/causa.\n"
-                     "3. Asume que el usuario es un oficial de cumplimiento verificando a un cliente.\n"
-                     "Mantén un tono profesional y breve.")
+                                         "Entrega una respuesta concisa en ESPAÑOL y formato de 3 bloques:\n"
+                                         "1) Resultado de screening (probable / no concluyente / sin coincidencias).\n"
+                                         "2) Evidencia clave (fuente y referencia principal).\n"
+                                         "3) Riesgo preliminar (alto/medio/bajo) con nota de cautela si aplica.\n"
+                                         "Máximo 140 palabras.")
         ])
 
         # Chain

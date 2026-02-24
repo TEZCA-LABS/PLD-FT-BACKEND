@@ -489,3 +489,32 @@ El sistema está completamente contenerizado. A continuación se detallan los co
 
 ---
 
+## 12. Estrategia Avanzada de Enriquecimiento (RAG para Cumplimiento)
+
+Para aumentar la explicabilidad y reducir falsos positivos en screening PLD/FT, el backend sigue y extiende este enfoque:
+
+1. **Enriquecimiento por Fuente y Estatus Legal**
+    - **ONU**: además del match nominal, priorizar explicación de causalidad de inclusión mediante resumen narrativo del comité correspondiente.
+    - **México (SABG/PDN S3)**: distinguir naturaleza de la falta, firmeza de resolución, autoridad resolutora y vigencia de inhabilitación.
+    - **SAT 69-B**: tratar explícitamente estatus `Presunto`, `Definitivo`, `Desvirtuado`, `Sentencia Favorable` para separar riesgo alto vs mitigado.
+
+2. **Contexto Recuperable para RAG (Grounded)**
+    - Indexar texto enriquecido narrativo, no solo filas tabulares.
+    - Incluir siempre identificador de evidencia (RFC, referencia/oficio, data_id) para trazabilidad.
+    - Exigir en salida del modelo una síntesis con fuentes y advertencia de ambigüedad por homonimia.
+
+3. **Controles Anti-Alucinación**
+    - Respuestas únicamente con base en contexto recuperado.
+    - Prohibición de inferir delitos no explicitados en registros oficiales.
+    - Solicitar identificador único (RFC/referencia/fecha de nacimiento) cuando la búsqueda sea ambigua.
+
+4. **Roadmap de Integración Externa (Siguiente Fase)**
+    - Conector de resúmenes narrativos ONU por prefijo de referencia (QDi/QDe, TAi/TAe, etc.).
+    - Conector PDN S3 para metadatos jurídicos de sanción firme.
+    - Enlace DOF por número de oficio SAT para explicación de causalidad administrativa.
+    - (Opcional) Agregación de entidades y vínculos con OpenSanctions para cobertura internacional y PEP.
+
+Este enfoque permite que el sistema responda no solo **si** existe una coincidencia, sino también **por qué**, **con qué evidencia** y **con qué nivel de riesgo operativo/legal**.
+
+---
+

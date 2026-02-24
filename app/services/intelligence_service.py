@@ -35,7 +35,14 @@ def _redact_pii(text: str) -> str:
 def _build_context_payload(context_text: str) -> Dict[str, Any]:
     lines = [line.strip() for line in context_text.splitlines() if line.strip()]
     parsed_entries: List[Dict[str, Optional[str]]] = []
-    current_entry: Dict[str, Optional[str]] = {"name": None, "source": None, "detail": None}
+    current_entry: Dict[str, Optional[str]] = {
+        "name": None,
+        "source": None,
+        "detail": None,
+        "status": None,
+        "risk": None,
+        "evidence": None,
+    }
 
     for line in lines:
         lowered = line.lower()
@@ -43,10 +50,23 @@ def _build_context_payload(context_text: str) -> Dict[str, Any]:
             # New block starts when we already had a name collected.
             if current_entry.get("name"):
                 parsed_entries.append(current_entry)
-                current_entry = {"name": None, "source": None, "detail": None}
+                current_entry = {
+                    "name": None,
+                    "source": None,
+                    "detail": None,
+                    "status": None,
+                    "risk": None,
+                    "evidence": None,
+                }
             current_entry["name"] = line.split(":", 1)[1].strip()
         elif lowered.startswith("fuente:"):
             current_entry["source"] = line.split(":", 1)[1].strip()
+        elif lowered.startswith("estado:"):
+            current_entry["status"] = line.split(":", 1)[1].strip()
+        elif lowered.startswith("riesgo:"):
+            current_entry["risk"] = line.split(":", 1)[1].strip()
+        elif lowered.startswith("evidencia:"):
+            current_entry["evidence"] = line.split(":", 1)[1].strip()
         elif lowered.startswith("detalle:"):
             current_entry["detail"] = line.split(":", 1)[1].strip()
 
@@ -55,7 +75,14 @@ def _build_context_payload(context_text: str) -> Dict[str, Any]:
 
     source_name = parsed_entries[0]["name"] if parsed_entries else None
     source_org = parsed_entries[0]["source"] if parsed_entries else None
-    snippet = parsed_entries[0]["detail"] if parsed_entries else None
+    first_entry = parsed_entries[0] if parsed_entries else {}
+    snippet_parts = [
+        f"Estado: {first_entry.get('status')}" if first_entry.get("status") else None,
+        f"Riesgo: {first_entry.get('risk')}" if first_entry.get("risk") else None,
+        f"Evidencia: {first_entry.get('evidence')}" if first_entry.get("evidence") else None,
+        first_entry.get("detail"),
+    ]
+    snippet = " | ".join([part for part in snippet_parts if part]) if parsed_entries else None
 
     related_entities: List[Dict[str, str]] = []
     seen_names = set()
@@ -65,9 +92,22 @@ def _build_context_payload(context_text: str) -> Dict[str, Any]:
         if not name or name.lower() in seen_names:
             continue
         seen_names.add(name.lower())
+        status = (entry.get("status") or "").strip()
+        risk = (entry.get("risk") or "").strip()
+        evidence = (entry.get("evidence") or "").strip()
+
         relation = "top match"
         if source:
             relation = f"top match ({source})"
+        extras = []
+        if status:
+            extras.append(f"estado: {status}")
+        if risk:
+            extras.append(f"riesgo: {risk}")
+        if evidence:
+            extras.append(f"evidencia: {evidence}")
+        if extras:
+            relation = f"{relation} | {'; '.join(extras)}"
         related_entities.append(
             {
                 "name": name,
