@@ -75,7 +75,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: pld-ft-worker
-    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=4
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=4 -Q main-queue
     environment:
       - POSTGRES_SERVER=db
       - POSTGRES_USER=${POSTGRES_USER:-postgres}

@@ -11,6 +11,7 @@ celery_app.conf.task_routes = {
 
 # Import tasks to ensure registration
 import app.tasks.sanctions_tasks
+import app.services.etl.tasks
 
 celery_app.conf.beat_schedule = {
     "sync-un-sanctions-monthly": {

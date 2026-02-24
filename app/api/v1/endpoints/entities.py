@@ -1,6 +1,6 @@
 
 from typing import Any, List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -23,7 +23,7 @@ async def read_entities(
     result = await db.execute(select(EntityDocument).offset(skip).limit(limit))
     return result.scalars().all()
 
-@router.post("/", response_model=Entity)
+@router.post("/", status_code=status.HTTP_202_ACCEPTED)
 async def create_entity(
     *,
     db: AsyncSession = Depends(get_db),
@@ -42,12 +42,12 @@ async def create_entity(
     
     task = process_entity_data.delay(entity_in.name, entity_in.source, entity_in.content)
     
-    # We return a dummy response since the actual creation happens in the worker
-    # Or we could create the DB record here and let the worker handle the embedding.
-    # For simplicity, let's just return what was sent, assuming success.
+    # Return async task metadata; persistence is handled by worker.
     return {
-        "id": 0, # ID will be generated
+        "task_id": task.id,
+        "status": "accepted",
+        "message": "Entity ingestion queued",
         "name": entity_in.name,
         "source": entity_in.source,
-        "content": entity_in.content
+        "content": entity_in.content,
     }
