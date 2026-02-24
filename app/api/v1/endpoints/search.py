@@ -21,6 +21,18 @@ async def search_sanctions_endpoint(
     Returns a summary analysis and the list of results.
     """
     results = await search_sanctions(db=db, query=q, limit=limit)
+
+    # Simple serialization first (before optional side-effects like audit log)
+    serialized = []
+    for s in results:
+        serialized.append({
+            "id": s.id,
+            "entity_name": s.entity_name,
+            "reference_number": s.reference_number,
+            "program": s.program,
+            "source": s.source,
+            "score": "N/A" # TODO: Return match score
+        })
     
     # Audit Logging
     try:
@@ -35,19 +47,7 @@ async def search_sanctions_endpoint(
     except Exception as e:
         # Do not fail the search if logging fails, but log the error
         print(f"Failed to log search: {e}")
-        pass
-    
-    # Simple serialization
-    serialized = []
-    for s in results:
-        serialized.append({
-            "id": s.id,
-            "entity_name": s.entity_name,
-            "reference_number": s.reference_number,
-            "program": s.program,
-            "source": s.source,
-            "score": "N/A" # TODO: Return match score
-        })
+        await db.rollback()
 
     # Analyze with LangChain
     summary = await analyze_search_results(query=q, results=serialized)

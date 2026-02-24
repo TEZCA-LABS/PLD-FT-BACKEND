@@ -3,6 +3,8 @@ from sqlalchemy.sql import func
 from app.db.base import Base
 
 class AuditLog(Base):
+    __tablename__ = "audit_log"
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("user.id"), nullable=False, index=True)
     action = Column(String, nullable=False, index=True) # e.g., "SEARCH_SANCTIONS"
