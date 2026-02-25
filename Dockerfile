@@ -35,11 +35,16 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Create a non-root user for security
-RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+# Create a non-root user for security with a persistent home directory
+RUN addgroup --system appgroup && \
+    adduser --system --ingroup appgroup --home /home/appuser appuser && \
+    mkdir -p /home/appuser/.local && \
+    chown -R appuser:appgroup /home/appuser
 
-# Install curl for health checks
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+# Install curl for health checks and graphviz for Diagram-as-Code
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl graphviz && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy installed python dependencies from the builder stage
 COPY --from=builder /install /usr/local

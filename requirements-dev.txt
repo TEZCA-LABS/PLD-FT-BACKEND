@@ -1,0 +1,11 @@
+# Development & Documentation Dependencies
+
+# Diagram-as-Code (DaC)
+diagrams==0.24.1
+graphviz==0.20.1
+
+# Documentation
+mermaid-py==0.2.0
+
+# CI/CD Utilities
+docker-compose-diagram==0.2.1
