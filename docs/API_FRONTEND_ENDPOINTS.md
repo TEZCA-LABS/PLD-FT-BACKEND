@@ -77,6 +77,8 @@ Authorization: Bearer <access_token>
 | GET | `/api/v1/search/sanctions` | Sí (usuario activo) | Búsqueda híbrida en sanciones |
 | GET | `/api/v1/audit/history` | Sí (admin/auditor/superuser) | Historial de auditoría |
 | POST | `/api/v1/audit/ai-events` | Sí (usuario activo) | Registrar evento IA explícito |
+| GET | `/api/v1/roles/permissions` | Sí (admin/auditor/superuser) | Obtener matriz de permisos por rol |
+| PUT | `/api/v1/roles/permissions` | Sí (superuser/admin) | Actualizar matriz de permisos por rol |
 
 ---
 
@@ -612,6 +614,92 @@ Body:
   }
 }
 ```
+
+---
+
+## 4.9 Roles
+
+### GET `/api/v1/roles/permissions`
+
+Descripción: obtiene la matriz completa de permisos por rol para administración frontend.
+
+Auth: admin/auditor/superuser.
+
+Respuesta 200 (`RolePermissionsResponse`):
+
+```json
+{
+  "roles": [
+    { "key": "admin", "label": "Admin" },
+    { "key": "consultant", "label": "Analista" },
+    { "key": "auditor", "label": "Auditor" }
+  ],
+  "permissions": [
+    {
+      "id": "query_llm",
+      "module": "consultas",
+      "label": "Consultar LLM (IA Generativa)",
+      "description": "Permite enviar consultas al asistente IA.",
+      "allowed_roles": ["admin", "consultant"]
+    }
+  ],
+  "updated_at": "2026-03-21T12:34:56.000000+00:00"
+}
+```
+
+Errores comunes:
+
+- `403` -> `"Not authorized to view audit logs."`
+
+### PUT `/api/v1/roles/permissions`
+
+Descripción: actualiza los roles permitidos por cada permiso de la matriz.
+
+Auth: superuser/admin.
+
+Body (`RolePermissionsUpdateRequest`):
+
+```json
+{
+  "permissions": [
+    {
+      "id": "query_llm",
+      "allowed_roles": ["admin", "consultant", "auditor"]
+    },
+    {
+      "id": "upload_sanctions_xml",
+      "allowed_roles": ["admin"]
+    }
+  ]
+}
+```
+
+Respuesta 200 (`RolePermissionsResponse`):
+
+```json
+{
+  "roles": [
+    { "key": "admin", "label": "Admin" },
+    { "key": "consultant", "label": "Analista" },
+    { "key": "auditor", "label": "Auditor" }
+  ],
+  "permissions": [
+    {
+      "id": "query_llm",
+      "module": "consultas",
+      "label": "Consultar LLM (IA Generativa)",
+      "description": "Permite enviar consultas al asistente IA.",
+      "allowed_roles": ["admin", "consultant", "auditor"]
+    }
+  ],
+  "updated_at": "2026-03-21T12:40:00.000000+00:00"
+}
+```
+
+Errores comunes:
+
+- `400` -> `"Invalid roles for permission '<permission_id>': ..."`
+- `400` -> `"The user doesn't have enough privileges"`
 
 ---
 

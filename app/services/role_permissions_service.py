@@ -1,9 +1,11 @@
-import json
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, List
 
 from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.role_permission import RolePermission
 
 ROLE_DEFINITIONS = [
     {"key": "admin", "label": "Admin"},
@@ -49,23 +51,8 @@ DEFAULT_PERMISSIONS = [
     },
 ]
 
-DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "role_permissions.json"
-
-
 def _get_role_keys() -> set[str]:
     return {role["key"] for role in ROLE_DEFINITIONS}
-
-
-def _ensure_data_file_exists() -> None:
-    if DATA_PATH.exists():
-        return
-
-    DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-        "permissions": DEFAULT_PERMISSIONS,
-    }
-    DATA_PATH.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
 
 
 def _validate_permissions(permissions: List[Dict[str, Any]]) -> None:
@@ -80,31 +67,58 @@ def _validate_permissions(permissions: List[Dict[str, Any]]) -> None:
             )
 
 
-def get_role_permissions() -> Dict[str, Any]:
-    _ensure_data_file_exists()
+def _to_permission_payload(permission: RolePermission) -> Dict[str, Any]:
+    return {
+        "id": permission.permission_id,
+        "module": permission.module,
+        "label": permission.label,
+        "description": permission.description,
+        "allowed_roles": permission.allowed_roles or [],
+    }
 
-    raw = DATA_PATH.read_text(encoding="utf-8")
-    payload = json.loads(raw)
 
-    permissions = payload.get("permissions", [])
+async def _seed_defaults_if_empty(db: AsyncSession) -> List[RolePermission]:
+    query = select(RolePermission).order_by(RolePermission.id.asc())
+    result = await db.execute(query)
+    rows = list(result.scalars().all())
+
+    if rows:
+        return rows
+
+    for permission in DEFAULT_PERMISSIONS:
+        row = RolePermission()
+        row.permission_id = permission["id"]
+        row.module = permission["module"]
+        row.label = permission["label"]
+        setattr(row, "description", permission.get("description"))
+        row.allowed_roles = permission.get("allowed_roles", [])
+        db.add(row)
+
+    await db.commit()
+    result = await db.execute(query)
+    return list(result.scalars().all())
+
+
+async def get_role_permissions(db: AsyncSession) -> Dict[str, Any]:
+    rows = await _seed_defaults_if_empty(db)
+    permissions = [_to_permission_payload(row) for row in rows]
     _validate_permissions(permissions)
 
-    updated_at = payload.get("updated_at")
-    try:
-        parsed_updated_at = datetime.fromisoformat(updated_at) if updated_at else datetime.now(timezone.utc)
-    except ValueError:
-        parsed_updated_at = datetime.now(timezone.utc)
+    latest_updated_at = max(
+        (row.updated_at for row in rows if row.updated_at is not None),
+        default=datetime.now(timezone.utc),
+    )
 
     return {
         "roles": ROLE_DEFINITIONS,
         "permissions": permissions,
-        "updated_at": parsed_updated_at,
+        "updated_at": latest_updated_at,
     }
 
 
-def update_role_permissions(updates: List[Dict[str, Any]]) -> Dict[str, Any]:
-    current = get_role_permissions()
-    existing_permissions = current["permissions"]
+async def update_role_permissions(db: AsyncSession, updates: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = await _seed_defaults_if_empty(db)
+    existing_permissions = [_to_permission_payload(row) for row in rows]
 
     update_map = {item["id"]: item.get("allowed_roles", []) for item in updates}
 
@@ -120,15 +134,26 @@ def update_role_permissions(updates: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     _validate_permissions(next_permissions)
 
-    next_payload = {
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-        "permissions": next_permissions,
-    }
+    rows_by_permission = {row.permission_id: row for row in rows}
+    for permission in next_permissions:
+        row = rows_by_permission.get(permission["id"])
+        if not row:
+            continue
+        row.allowed_roles = permission.get("allowed_roles", [])
 
-    DATA_PATH.write_text(json.dumps(next_payload, ensure_ascii=True, indent=2), encoding="utf-8")
+    await db.commit()
+
+    refreshed = await db.execute(select(RolePermission).order_by(RolePermission.id.asc()))
+    refreshed_rows = list(refreshed.scalars().all())
+    latest_updated_at = max(
+        (row.updated_at for row in refreshed_rows if row.updated_at is not None),
+        default=datetime.now(timezone.utc),
+    )
+
+    refreshed_permissions = [_to_permission_payload(row) for row in refreshed_rows]
 
     return {
         "roles": ROLE_DEFINITIONS,
-        "permissions": next_permissions,
-        "updated_at": datetime.fromisoformat(next_payload["updated_at"]),
+        "permissions": refreshed_permissions,
+        "updated_at": latest_updated_at,
     }
