@@ -1,0 +1,42 @@
+sequenceDiagram
+    autonumber
+    actor U as Usuario
+    participant FE as Frontend (AI Chat)
+    participant API as API /intelligence/sessions
+    participant IS as IntelligenceService
+    participant RAG as RAG Retrieval
+    participant LLM as OpenAI LLM
+    participant DB as PostgreSQL
+    participant AUD as AuditService
+
+    U->>FE: Crear o seleccionar sesion
+    FE->>API: POST/GET /sessions
+    API->>DB: Persistir o recuperar sesion
+    DB-->>API: Sesion activa
+    API-->>FE: session_id
+
+    U->>FE: Enviar mensaje
+    FE->>API: POST /sessions/{id}/messages
+    API->>IS: create_message_and_analysis(...)
+    IS->>DB: Guardar mensaje de usuario
+
+    IS->>RAG: Recuperar contexto relevante
+    RAG->>DB: Search sanctions + vectorstore
+    DB-->>RAG: Evidencia estructurada
+    RAG->>LLM: Prompt enriquecido con contexto
+    LLM-->>RAG: Analisis generado
+    RAG-->>IS: Respuesta + contexto
+
+    IS->>DB: Guardar respuesta del asistente
+    IS->>AUD: Registrar evento IA
+    AUD->>DB: INSERT audit_log
+
+    API-->>FE: Mensaje persistido + evidencia
+    FE-->>U: Respuesta trazable
+
+    opt Exportar expediente
+        U->>FE: Exportar caso
+        FE->>API: POST /sessions/{id}/export
+        API->>DB: Construir expediente
+        API-->>FE: PDF/JSON
+    end

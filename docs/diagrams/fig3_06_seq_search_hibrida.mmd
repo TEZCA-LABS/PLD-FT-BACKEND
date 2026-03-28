@@ -1,0 +1,27 @@
+sequenceDiagram
+    autonumber
+    actor U as Usuario
+    participant FE as Frontend (Search page)
+    participant API as API /search/sanctions
+    participant SS as SearchService
+    participant DB as PostgreSQL + pgvector
+    participant AUD as AuditService / audit_log
+
+    U->>FE: Captura consulta de entidad
+    FE->>API: GET /api/v1/search/sanctions?q=...
+    API->>SS: search_sanctions(query, limit)
+
+    SS->>DB: 1) Exact match (ILIKE)
+    DB-->>SS: Coincidencias exactas
+    SS->>DB: 2) Fuzzy match (similarity)
+    DB-->>SS: Coincidencias difusas
+    SS->>DB: 3) Vector search (pgvector)
+    DB-->>SS: Coincidencias semanticas
+
+    SS-->>API: Resultados consolidados
+    API->>AUD: Registrar evento de busqueda
+    AUD->>DB: INSERT audit_log
+    DB-->>AUD: OK
+
+    API-->>FE: JSON con resultados + resumen IA
+    FE-->>U: Tabla de resultados y contexto

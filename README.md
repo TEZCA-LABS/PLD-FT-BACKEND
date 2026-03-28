@@ -241,6 +241,42 @@ Los scripts individuales en `scripts/` aún existen por compatibilidad, pero se 
 
 ---
 
+### 7. Generacion de Diagramas para Tesis (Capitulo 3)
+
+Se agrego un pipeline reproducible para generar 4 diagramas requeridos por `SEMINARIO2/Capitulo3.tex`:
+
+- `fig3_01_arquitectura_global.png`
+- `fig3_04_deployment_docker.png`
+- `fig3_06_seq_search_hibrida.png`
+- `fig3_07_seq_ai_chat.png`
+
+Archivos fuente:
+
+- Script principal: `scripts/generate_thesis_diagrams.py`
+- Mermaid editable:
+    - `docs/diagrams/fig3_06_seq_search_hibrida.mmd`
+    - `docs/diagrams/fig3_07_seq_ai_chat.mmd`
+
+Comando de ejecucion:
+
+```bash
+python scripts/generate_thesis_diagrams.py
+```
+
+Prerequisitos:
+
+```bash
+pip install -r requirements-dev.txt
+npm i -g @mermaid-js/mermaid-cli
+```
+
+Salida final:
+
+- Los PNG intermedios se generan en `docs/diagrams/out/`
+- Los PNG finales se copian automaticamente a `../SEMINARIO2/Imagenes/`
+
+---
+
 ---
 
 ## Guía Completa de Despliegue
