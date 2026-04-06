@@ -1,5 +1,6 @@
 from typing import Any, List
-from fastapi import APIRouter, Depends
+from datetime import datetime
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.rag_schema import AIEventRequest
 
@@ -16,6 +17,10 @@ router = APIRouter()
 async def read_audit_logs(
     skip: int = 0,
     limit: int = 50,
+    action_contains: str | None = Query(None, description="Action filter"),
+    query_text: str | None = Query(None, description="Search text in details"),
+    timestamp_from: datetime | None = Query(None, description="Start timestamp"),
+    timestamp_to: datetime | None = Query(None, description="End timestamp"),
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_privileged_user),
 ) -> Any:
@@ -23,7 +28,15 @@ async def read_audit_logs(
     Retrieve audit logs.
     Only Admins and Auditors can access this endpoint.
     """
-    logs = await get_audit_logs(db, skip=skip, limit=limit)
+    logs = await get_audit_logs(
+        db,
+        skip=skip,
+        limit=limit,
+        action_contains=action_contains,
+        query_text=query_text,
+        timestamp_from=timestamp_from,
+        timestamp_to=timestamp_to,
+    )
     return logs
 
 
