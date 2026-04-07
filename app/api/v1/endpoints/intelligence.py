@@ -41,7 +41,14 @@ from app.services.intelligence_service import (
     list_sessions,
     update_session,
 )
-from app.services.rag.chains import get_rag_chain, is_ambiguous_query, retrieve_context
+from app.services.rag.chains import (
+    build_match_correction,
+    context_has_target_match,
+    get_rag_chain,
+    is_ambiguous_query,
+    response_indicates_no_match,
+    retrieve_context,
+)
 
 router = APIRouter()
 
@@ -59,6 +66,11 @@ async def analyze_entity(
     context = await retrieve_context(request.query)
     chain = get_rag_chain()
     response = await chain.ainvoke({"context": context, "question": request.query})
+
+    if response_indicates_no_match(response) and context_has_target_match(request.query, context):
+        correction = build_match_correction(request.query, context)
+        if correction:
+            response = correction
 
     if is_ambiguous_query(request.query, context):
         response = (

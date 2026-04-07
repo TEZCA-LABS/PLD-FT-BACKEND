@@ -17,7 +17,14 @@ from app.models.ai_chat_message import AIChatMessage
 from app.models.ai_chat_session import AIChatSession
 from app.models.user import User
 from app.schemas.rag_schema import AnalysisOptions
-from app.services.rag.chains import get_rag_chain, is_ambiguous_query, retrieve_context
+from app.services.rag.chains import (
+    build_match_correction,
+    context_has_target_match,
+    get_rag_chain,
+    is_ambiguous_query,
+    response_indicates_no_match,
+    retrieve_context,
+)
 
 
 def _sanitize_text(text: str) -> str:
@@ -279,6 +286,11 @@ async def create_message_and_analysis(
 
     chain = get_rag_chain()
     response = await chain.ainvoke({"context": context_text, "question": prompt})
+
+    if response_indicates_no_match(response) and context_has_target_match(prompt, context_text):
+        correction = build_match_correction(prompt, context_text)
+        if correction:
+            response = correction
 
     if is_ambiguous_query(prompt, context_text):
         response = (
