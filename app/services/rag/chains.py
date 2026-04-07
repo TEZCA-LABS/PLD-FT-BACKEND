@@ -99,7 +99,11 @@ async def retrieve_context(question: str):
         async with async_session() as db:
             sanction_results = await search_sanctions(db=db, query=sanction_query, limit=8)
 
-        for sanction in sanction_results:
+        for entry in sanction_results:
+            sanction = entry.get("sanction") if isinstance(entry, dict) else entry
+            if sanction is None:
+                continue
+
             details = []
             if sanction.program:
                 details.append(f"Programa: {sanction.program}")

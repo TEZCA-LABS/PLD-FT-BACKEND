@@ -352,6 +352,34 @@ async def create_attachment(
     return attachment
 
 
+def build_attachment_response(attachment: AIChatAttachment) -> Dict[str, Any]:
+    return {
+        "id": attachment.id,
+        "file_name": attachment.file_name,
+        "mime_type": attachment.mime_type,
+        "size": attachment.size,
+        "status": attachment.status,
+        "file_url": f"/api/v1/intelligence/sessions/{attachment.session_id}/attachments/{attachment.id}/download",
+        "created_at": attachment.created_at,
+    }
+
+
+async def get_attachment_or_404(
+    db: AsyncSession,
+    session_id: int,
+    attachment_id: int,
+) -> AIChatAttachment:
+    query = select(AIChatAttachment).where(
+        AIChatAttachment.session_id == session_id,
+        AIChatAttachment.id == attachment_id,
+    )
+    result = await db.execute(query)
+    attachment = result.scalar_one_or_none()
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    return attachment
+
+
 async def list_attachments(
     db: AsyncSession,
     session_id: int,

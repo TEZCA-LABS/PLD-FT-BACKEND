@@ -129,6 +129,7 @@ class AttachmentResponse(BaseModel):
     mime_type: str
     size: int
     status: str
+    file_url: Optional[str] = None
     created_at: datetime
 
     class Config:

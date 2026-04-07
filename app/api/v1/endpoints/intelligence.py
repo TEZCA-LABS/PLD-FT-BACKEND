@@ -1,8 +1,10 @@
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
-from fastapi.responses import StreamingResponse
+import os
+
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, HTTPException
+from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
@@ -24,6 +26,7 @@ from app.schemas.rag_schema import (
 from app.services.audit_service import log_search
 from app.services.intelligence_service import (
     _ensure_session_access,
+    build_attachment_response,
     build_export_payload,
     build_json_bytes,
     build_pdf_from_payload,
@@ -31,6 +34,7 @@ from app.services.intelligence_service import (
     create_message_and_analysis,
     create_session,
     delete_session,
+    get_attachment_or_404,
     get_session_or_404,
     list_attachments,
     list_messages,
@@ -185,7 +189,7 @@ async def upload_session_attachment(
     session_obj = await get_session_or_404(db, session_id)
     _ensure_session_access(session_obj, current_user)
     attachment = await create_attachment(db=db, session_id=session_id, upload=file)
-    return attachment
+    return build_attachment_response(attachment)
 
 
 @router.get("/sessions/{session_id}/attachments", response_model=AttachmentListResponse)
@@ -199,7 +203,37 @@ async def get_session_attachments(
     session_obj = await get_session_or_404(db, session_id)
     _ensure_session_access(session_obj, current_user)
     items, total = await list_attachments(db=db, session_id=session_id, skip=skip, limit=limit)
-    return {"items": items, "total": total, "skip": skip, "limit": limit}
+    return {
+        "items": [build_attachment_response(item) for item in items],
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+    }
+
+
+@router.get("/sessions/{session_id}/attachments/{attachment_id}/download")
+async def download_session_attachment(
+    session_id: int,
+    attachment_id: int,
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    session_obj = await get_session_or_404(db, session_id)
+    _ensure_session_access(session_obj, current_user)
+
+    attachment = await get_attachment_or_404(
+        db=db,
+        session_id=session_id,
+        attachment_id=attachment_id,
+    )
+    if not os.path.exists(attachment.storage_path):
+        raise HTTPException(status_code=404, detail="Stored file not found")
+
+    return FileResponse(
+        path=attachment.storage_path,
+        media_type=attachment.mime_type,
+        filename=attachment.file_name,
+    )
 
 
 @router.post("/sessions/{session_id}/export")
