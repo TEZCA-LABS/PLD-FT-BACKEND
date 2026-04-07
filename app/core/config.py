@@ -1,7 +1,8 @@
 
 from typing import Any, List, Union
-from pydantic import AnyHttpUrl, validator
+from pydantic import AnyHttpUrl, Field, validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+import os
 
 class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
@@ -10,17 +11,19 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     
     # SECURITY
-    SECRET_KEY: str = "key" 
+    SECRET_KEY: str = Field(default_factory=lambda: os.getenv("SECRET_KEY", ""))
     @validator("SECRET_KEY")
     def warn_if_default_secret(cls, v):
-        if v == "key":
+        if not v:
+            raise ValueError("SECRET_KEY must be provided via environment variable.")
+        if v in {"key", "dev-key", "change-me"}:
             import warnings
-            warnings.warn("The SECRET_KEY is set to the default insecure value. Change this in production.", UserWarning)
+            warnings.warn("The SECRET_KEY is set to a weak default value. Change this in production.", UserWarning)
         return v
         
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    MASTER_PASSWORD: str = "admin_master_secret"
+    MASTER_PASSWORD: str = Field(default_factory=lambda: os.getenv("MASTER_PASSWORD", ""))
     FIRST_SUPERUSER: str = "admin@example.com"
     FIRST_SUPERUSER_PASSWORD: str = "admin"
     
