@@ -1,7 +1,7 @@
 # Documentación Técnica: Arquitectura Backend PLD/FT
 
 **Versión:** 1.1  
-**Fecha:** 13 de Diciembre, 2025 | **Actualizado:** 20 de Febrero, 2026
+**Fecha:** 13 de Diciembre, 2025 | **Actualizado:** 15 de abril, 2026
 
 ---
 
@@ -16,6 +16,17 @@
 ## Resumen Ejecutivo
 
 Este documento detalla la arquitectura, decisiones de diseño y protocolos de implementación del sistema Backend para la Prevención de Lavado de Dinero y Financiamiento al Terrorismo (PLD/FT). El sistema está diseñado como una solución híbrida que integra procesamiento transaccional tradicional con capacidades avanzadas de Inteligencia Artificial (RAG - Retrieval-Augmented Generation) para el análisis de entidades y sanciones.
+
+---
+
+## Enlaces relacionados
+
+### Documento de tesis Google Docs
+https://docs.google.com/document/d/1_FkgUz1kroUEUxOYc9tY1YGw7hadGMCo/edit?usp=sharing&ouid=117129143776158652215&rtpof=true&sd=true
+
+
+### Figma
+https://www.figma.com/design/vklVs1Dog1P2WgnDREba1h/PLD-FT?node-id=0-1&t=SXKX9OUfKaSOomU1-1
 
 ---
 
@@ -551,16 +562,5 @@ Para aumentar la explicabilidad y reducir falsos positivos en screening PLD/FT, 
     - (Opcional) Agregación de entidades y vínculos con OpenSanctions para cobertura internacional y PEP.
 
 Este enfoque permite que el sistema responda no solo **si** existe una coincidencia, sino también **por qué**, **con qué evidencia** y **con qué nivel de riesgo operativo/legal**.
-
----
-
-## Enlaces relacionados
-
-### Documento de tesis Google Docs
-https://docs.google.com/document/d/1_FkgUz1kroUEUxOYc9tY1YGw7hadGMCo/edit?usp=sharing&ouid=117129143776158652215&rtpof=true&sd=true
-
-
-### Figma
-https://www.figma.com/design/vklVs1Dog1P2WgnDREba1h/PLD-FT?node-id=0-1&t=SXKX9OUfKaSOomU1-1
 
 ---
