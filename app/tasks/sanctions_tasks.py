@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.services.sanction_service import sync_sanctions_data
 from app.services.mex_sanction_service import sync_mex_sanctions_data
 from app.services.sat_service import sync_sat_sanctions_data
+from app.services.ofac_sanction_service import sync_ofac_sdn_data, sync_ofac_cons_data
 
 logger = get_task_logger(__name__)
 
@@ -99,6 +100,46 @@ def sync_sat_sanctions_task():
         logger.error(f"Error in SAT 69-B Sync Task: {e}")
         raise e
 
+@celery_app.task(name="sync_ofac_sdn_task")
+def sync_ofac_sdn_task():
+    """
+    Celery task to download the OFAC SDN Advanced XML and run the sync service.
+    """
+    logger.info("Starting OFAC SDN Sync Task...")
+    try:
+        response = httpx.get(settings.OFAC_SDN_XML_URL, timeout=300.0, follow_redirects=True)
+        response.raise_for_status()
+        xml_content = response.content
+        logger.info(f"Downloaded OFAC SDN XML successfully. Size: {len(xml_content)} bytes")
+        
+        asyncio.run(run_ofac_sdn_sync_logic(xml_content))
+        
+        logger.info("OFAC SDN Sync Task Completed Successfully.")
+        return "Sync Successful"
+    except Exception as e:
+        logger.error(f"Error in OFAC SDN Sync Task: {e}")
+        raise e
+
+@celery_app.task(name="sync_ofac_cons_task")
+def sync_ofac_cons_task():
+    """
+    Celery task to download the OFAC Consolidated Advanced XML and run the sync service.
+    """
+    logger.info("Starting OFAC Consolidated Sync Task...")
+    try:
+        response = httpx.get(settings.OFAC_CONS_XML_URL, timeout=300.0, follow_redirects=True)
+        response.raise_for_status()
+        xml_content = response.content
+        logger.info(f"Downloaded OFAC CONS XML successfully. Size: {len(xml_content)} bytes")
+        
+        asyncio.run(run_ofac_cons_sync_logic(xml_content))
+        
+        logger.info("OFAC CONS Sync Task Completed Successfully.")
+        return "Sync Successful"
+    except Exception as e:
+        logger.error(f"Error in OFAC CONS Sync Task: {e}")
+        raise e
+
 from sqlalchemy.ext.asyncio import create_async_engine
 
 # ... (imports)
@@ -156,5 +197,25 @@ async def run_sat_sync_logic(csv_content: bytes):
         async with local_async_session() as session:
             result = await sync_sat_sanctions_data(session, csv_content)
             logger.info(f"SAT 69-B Sync Result: {result}")
+    finally:
+        await local_engine.dispose()
+
+async def run_ofac_sdn_sync_logic(xml_content: bytes):
+    local_engine = create_async_engine(settings.SQLALCHEMY_DATABASE_URI, future=True, echo=True)
+    local_async_session = sessionmaker(local_engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        async with local_async_session() as session:
+            result = await sync_ofac_sdn_data(session, xml_content)
+            logger.info(f"OFAC SDN Sync Result: {result}")
+    finally:
+        await local_engine.dispose()
+
+async def run_ofac_cons_sync_logic(xml_content: bytes):
+    local_engine = create_async_engine(settings.SQLALCHEMY_DATABASE_URI, future=True, echo=True)
+    local_async_session = sessionmaker(local_engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        async with local_async_session() as session:
+            result = await sync_ofac_cons_data(session, xml_content)
+            logger.info(f"OFAC CONS Sync Result: {result}")
     finally:
         await local_engine.dispose()

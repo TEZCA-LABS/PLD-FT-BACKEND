@@ -95,7 +95,7 @@ El sistema opera bajo un modelo de **Arquitectura Limpia (Clean Architecture)** 
 
 1.  **Capa de Presentación (API)**: Implementada con **FastAPI**. Maneja la entrada/salida HTTP, validación de esquemas (Pydantic) y enrutamiento. Es el único punto de entrada para clientes externos.
 2.  **Capa de Servicios (Business Logic)**: Contiene la lógica de negocio pura.
-    *   **ETL (Extract, Transform, Load)**: Orquestado por **Celery** y **Redis**. Maneja tareas asíncronas pesadas como el web scraping y la normalización de datos para no bloquear el hilo principal de la API.
+    *   **ETL (Extract, Transform, Load)**: Orquestado por **Celery** y **Redis**. Maneja tareas asíncronas pesadas como la descarga, parseo iterativo y normalización de listas de sanciones internacionales (ONU, OFAC SDN y Consolidated List en formato avanzado ASDM XML) y nacionales (SAT 69-B, Sancionados MEX) para no bloquear el hilo principal de la API.
     *   **RAG (Retrieval-Augmented Generation)**: Utiliza **LangChain** para orquestar la interacción entre la base de datos vectorial y el LLM (OpenAI), permitiendo búsquedas semánticas y generación de análisis contextuales.
     *   **Entity Resolution**: Módulo de agrupamiento inteligente que identifica y unifica registros duplicados o variantes de la misma persona (ej. "J. Doe" vs "John Doe") utilizando algoritmos de similitud y reglas de negocio.
     *   **Audit Logs**: Sistema de registro inmutable que traza todas las acciones críticas (búsquedas, modificaciones de usuarios), garantizando la trazabilidad y el no repudio para cumplimiento normativo.
