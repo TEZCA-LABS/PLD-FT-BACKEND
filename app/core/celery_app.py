@@ -2,6 +2,20 @@ from celery import Celery
 from celery.schedules import crontab
 from app.core.config import settings
 
+# Ensure all ORM models are imported in worker process so Base.metadata
+# contains every referenced table for FK resolution during task flushes.
+from app.models import (
+    ai_chat_attachment,
+    ai_chat_message,
+    ai_chat_session,
+    audit_log,
+    entity,
+    entity_profile,
+    role_permission,
+    sanction,
+    user,
+)
+
 celery_app = Celery("worker", broker=settings.REDIS_URL, backend=settings.REDIS_URL)
 
 celery_app.conf.task_routes = {

@@ -284,10 +284,16 @@ def verify_users_cmd():
                 created_user = await create_user(session, user=new_user_in)
                 logger.info(f"✅ Created: {created_user.email} (ID: {created_user.id})")
                 
-                # List
+                # Verify retrieval by email (deterministic)
+                fetched = await get_user_by_email(session, test_email)
+                found = fetched is not None and fetched.id == created_user.id
+                logger.info(f"✅ Retrieved by email. Test user found: {found}")
+                if not found:
+                    raise click.ClickException("User verification failed: created user not retrievable")
+
+                # List sample users for basic listing sanity check
                 users = await get_multi_users(session, limit=5)
-                found = any(u.id == created_user.id for u in users)
-                logger.info(f"✅ Listed {len(users)} users. Test user found: {found}")
+                logger.info(f"✅ Listed {len(users)} users (sample)")
                 
                 # Delete
                 deleted = await delete_user(session, user_id=created_user.id)
@@ -317,8 +323,15 @@ def verify_search_cmd():
                 logger.info(f"✅ Found {len(results)} results")
                 
                 if results:
-                    for r in results[:3]:
-                        logger.info(f"   - {r.entity_name} ({r.source})")
+                    for item in results[:3]:
+                        sanction = item.get("sanction")
+                        if sanction is None:
+                            logger.info("   - Result without sanction payload")
+                            continue
+                        logger.info(
+                            f"   - {sanction.entity_name} ({sanction.source}) "
+                            f"[{item.get('match_type', 'unknown')}]"
+                        )
                 
         finally:
             await engine.dispose()

@@ -28,12 +28,15 @@ def process_entity_data(name: str, source: str, description: str):
     
     clean_name = normalize_text(name)
     
-    # Run the async ingestion loop
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        # If we are already in a loop (unlikely for standard Celery worker), create a task
-        loop.create_task(ingest_entity(clean_name, description, source))
-    else:
-        loop.run_until_complete(ingest_entity(clean_name, description, source))
+    # Celery workers are sync by default; asyncio.run is the safest execution path.
+    try:
+        asyncio.run(ingest_entity(clean_name, description, source))
+    except RuntimeError:
+        # Fallback for environments that already own an event loop.
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(ingest_entity(clean_name, description, source))
+        finally:
+            loop.close()
     
     return f"Processed {clean_name}"

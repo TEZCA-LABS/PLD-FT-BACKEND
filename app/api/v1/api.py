@@ -18,4 +18,5 @@ api_router.include_router(intelligence.router, prefix="/intelligence", tags=["in
 api_router.include_router(sanctions.router, prefix="/sanctions", tags=["sanctions"])
 api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(audit_logs.router, prefix="/audit", tags=["audit"])
+api_router.include_router(audit_logs.router, prefix="/audit-logs", tags=["audit"])
 api_router.include_router(roles.router, prefix="/roles", tags=["roles"])

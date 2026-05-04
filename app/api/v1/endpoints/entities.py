@@ -4,8 +4,10 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.api import deps
 from app.db.session import get_db
 from app.models.entity import EntityDocument
+from app.models.user import User
 from app.schemas.entity_schema import Entity, EntityCreate
 from app.services.etl.tasks import process_entity_data
 
@@ -16,6 +18,7 @@ async def read_entities(
     db: AsyncSession = Depends(get_db),
     skip: int = 0,
     limit: int = 100,
+    current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
     Retrieve entities.
@@ -28,6 +31,7 @@ async def create_entity(
     *,
     db: AsyncSession = Depends(get_db),
     entity_in: EntityCreate,
+    current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
     Create new entity (Triggering ETL/Vectorization in background).
