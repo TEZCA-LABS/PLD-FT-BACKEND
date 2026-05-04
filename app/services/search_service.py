@@ -54,6 +54,40 @@ def _clamp_score(value: float) -> float:
     return round(value, 3)
 
 
+def _calculate_field_weight(query: str, sanction: "Sanction") -> float:
+    """
+    Calculate weighted score based on which field(s) match the query.
+    Field weights: entity_name=1.0, aliases=0.9, designation=0.7, remarks=0.5
+    """
+    query_lower = query.lower()
+    scores = []
+    
+    if sanction.entity_name and query_lower in sanction.entity_name.lower():
+        scores.append(1.0)
+    
+    if sanction.aliases:
+        try:
+            aliases_str = str(sanction.aliases).lower() if sanction.aliases else ""
+            if query_lower in aliases_str:
+                scores.append(0.9)
+        except Exception:
+            pass
+    
+    if sanction.designation:
+        try:
+            designation_str = str(sanction.designation).lower() if sanction.designation else ""
+            if query_lower in designation_str:
+                scores.append(0.7)
+        except Exception:
+            pass
+    
+    if sanction.remarks and query_lower in sanction.remarks.lower():
+        scores.append(0.5)
+    
+    # Return highest score found, default to 0.8 if no specific match
+    return _clamp_score(max(scores) if scores else 0.8)
+
+
 async def search_sanctions(
     db: AsyncSession,
     query: str,
@@ -63,12 +97,18 @@ async def search_sanctions(
     program: Optional[str] = None,
     listed_after: Optional[Any] = None,
     listed_before: Optional[Any] = None,
+    is_ambiguous: bool = False,
+    search_extended_fields: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Performs a hybrid search:
-    1. Exact Match (High Priority)
+    1. Exact Match (High Priority) - searches entity_name, aliases, and optionally designation/remarks
     2. Fuzzy Match (Trigram)
     3. Vector Match (Semantic) - if configured
+    
+    Args:
+        is_ambiguous: If True, lowers threshold and signals broader search
+        search_extended_fields: If True, searches designation and remarks fields (slower but more thorough)
     """
     results: List[Dict[str, Any]] = []
     seen_ids = set()
@@ -78,14 +118,27 @@ async def search_sanctions(
         listed_after=listed_after,
         listed_before=listed_before,
     )
+    
+    # Adjust threshold for ambiguous queries
+    effective_threshold = 0.5 if is_ambiguous else threshold
 
     # 1. Exact Match (High Priority)
+    # Build dynamic filter based on search_extended_fields
+    exact_filters = [
+        Sanction.entity_name.ilike(f"%{query}%"),
+        cast(Sanction.aliases, String).ilike(f"%{query}%"),
+    ]
+    
+    if search_extended_fields:
+        # Add designation and remarks to search when doing extended field search
+        exact_filters.extend([
+            cast(Sanction.designation, String).ilike(f"%{query}%"),
+            Sanction.remarks.ilike(f"%{query}%"),
+        ])
+    
     stmt_exact = select(Sanction).filter(
         and_(
-            or_(
-                Sanction.entity_name.ilike(f"%{query}%"),
-                cast(Sanction.aliases, String).ilike(f"%{query}%")
-            ),
+            or_(*exact_filters),
             *common_filters,
         )
     ).limit(limit)
@@ -94,10 +147,12 @@ async def search_sanctions(
     
     for m in exact_matches:
         if m.id not in seen_ids:
+            # Assign field-weighted score based on which field matched
+            field_score = _calculate_field_weight(query, m)
             results.append(
                 {
                     "sanction": m,
-                    "score": 1.0,
+                    "score": field_score,
                     "match_type": "exact",
                 }
             )
@@ -115,7 +170,7 @@ async def search_sanctions(
             similarity_expr = func.similarity(Sanction.entity_name, query)
             stmt_fuzzy = (
                 select(Sanction, similarity_expr.label("similarity_score"))
-                .filter(and_(similarity_expr > 0.3, *common_filters))
+                .filter(and_(similarity_expr > effective_threshold, *common_filters))
                 .order_by(similarity_expr.desc())
                 .limit(limit)
             )

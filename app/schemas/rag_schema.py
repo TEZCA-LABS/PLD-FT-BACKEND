@@ -114,6 +114,39 @@ class ChatMessageCreateRequest(BaseModel):
     options: Optional[AnalysisOptions] = None
 
 
+class ConfidenceLevel(str, Enum):
+    """Confidence level of RAG response based on match quality and query specificity."""
+    high = "high"
+    medium = "medium"
+    low = "low"
+
+
+class MatchTierType(str, Enum):
+    """Classification of match tiers based on relevance scoring."""
+    exact = "exact"
+    strong = "strong"
+    weak = "weak"
+    semantic = "semantic"
+
+
+class MatchResult(BaseModel):
+    """Individual match result with confidence score and tier classification."""
+    name: str
+    source: str
+    evidence_id: Optional[str] = None
+    score: float = Field(ge=0.0, le=1.0)
+    match_type: str = Field(default="unknown")
+    details: Optional[str] = None
+
+
+class MatchTierResults(BaseModel):
+    """Organized results by confidence tier."""
+    exact: List[MatchResult] = Field(default_factory=list)
+    strong: List[MatchResult] = Field(default_factory=list)
+    weak: List[MatchResult] = Field(default_factory=list)
+    semantic: List[MatchResult] = Field(default_factory=list)
+
+
 class ChatMessageCreateResponse(BaseModel):
     message_id: int
     analysis: str
@@ -121,6 +154,10 @@ class ChatMessageCreateResponse(BaseModel):
     usage: Optional[UsageMetrics] = None
     model_version: Optional[str] = None
     created_at: datetime
+    confidence: Optional[ConfidenceLevel] = None
+    ambiguity_detected: Optional[bool] = None
+    suggested_refinements: Optional[List[str]] = None
+    match_tiers: Optional[MatchTierResults] = None
 
 
 class AttachmentResponse(BaseModel):

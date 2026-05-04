@@ -63,19 +63,37 @@ async def analyze_entity(
     Endpoint for natural language queries about sanction lists.
     Backward-compatible wrapper that now also returns context.
     """
-    context = await retrieve_context(request.query)
+    context_text, context_metadata = await retrieve_context(request.query)
+    needs_clarification = context_metadata.get("needs_clarification", False)
+    
     chain = get_rag_chain()
-    response = await chain.ainvoke({"context": context, "question": request.query})
+    ambiguity_alert = ""
+    if needs_clarification:
+        match_tiers = context_metadata.get("match_tiers", {})
+        clarification_suggestions = context_metadata.get("clarification_suggestions", [])
+        ambiguity_alert = (
+            "\n\nAMBIGUEDAD DETECTADA:\n"
+            f"- Se encontraron {len(match_tiers.get('exact', []))} coincidencias exactas, "
+            f"{len(match_tiers.get('strong', []))} fuertes, "
+            f"{len(match_tiers.get('weak', []))} débiles\n"
+            "- Se sugiere al usuario proporcionar: " + ", ".join(clarification_suggestions)
+        )
+    
+    response = await chain.ainvoke({
+        "context": context_text,
+        "question": request.query,
+        "ambiguity_alert": ambiguity_alert,
+    })
 
-    if response_indicates_no_match(response) and context_has_target_match(request.query, context):
-        correction = build_match_correction(request.query, context)
+    if response_indicates_no_match(response) and context_has_target_match(request.query, context_text):
+        correction = build_match_correction(request.query, context_text)
         if correction:
             response = correction
 
-    if is_ambiguous_query(request.query, context):
+    if needs_clarification:
         response = (
             f"{response}\n\n"
-            "Sugerencia para mejorar la búsqueda: incluye un identificador único. "
+            "**Sugerencia para mejorar la búsqueda:** Incluye un identificador único. "
             "Ejemplo: 'Juan Carlos Araiza Arambula RFC AAAJ830204PA9 en SAT 69-B' "
             "o 'Juan Perez fuente MEX_SANCIONADOS referencia EXP-12345'."
         )

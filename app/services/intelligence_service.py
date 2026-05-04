@@ -280,22 +280,47 @@ async def create_message_and_analysis(
     await db.flush()
 
     start_time = time.perf_counter()
-    context_text = await retrieve_context(prompt)
+    
+    # Retrieve context and ambiguity metadata
+    context_text, context_metadata = await retrieve_context(prompt)
     context_payload = _build_context_payload(context_text)
     model_name = options.model if options and options.model else "gpt-4-turbo"
+    
+    # Extract ambiguity info from metadata
+    needs_clarification = context_metadata.get("needs_clarification", False)
+    specificity_score = context_metadata.get("specificity_score", 0.5)
+    match_tiers = context_metadata.get("match_tiers", {})
+    clarification_suggestions = context_metadata.get("clarification_suggestions", [])
+
+    # Build ambiguity alert for LLM if needed
+    ambiguity_alert = ""
+    if needs_clarification and (match_tiers.get("weak") or match_tiers.get("semantic")):
+        ambiguity_alert = (
+            "\n\nAMBIGUEDAD DETECTADA:\n"
+            f"- La consulta es genérica (especificidad: {specificity_score})\n"
+            f"- Se encontraron {len(match_tiers.get('exact', []))} coincidencias exactas, "
+            f"{len(match_tiers.get('strong', []))} fuertes, "
+            f"{len(match_tiers.get('weak', []))} débiles\n"
+            "- Se sugiere al usuario proporcionar: " + ", ".join(clarification_suggestions)
+        )
 
     chain = get_rag_chain()
-    response = await chain.ainvoke({"context": context_text, "question": prompt})
+    response = await chain.ainvoke({
+        "context": context_text,
+        "question": prompt,
+        "ambiguity_alert": ambiguity_alert,
+    })
 
     if response_indicates_no_match(response) and context_has_target_match(prompt, context_text):
         correction = build_match_correction(prompt, context_text)
         if correction:
             response = correction
 
-    if is_ambiguous_query(prompt, context_text):
+    # Improved ambiguity handling with new metadata
+    if needs_clarification:
         response = (
             f"{response}\n\n"
-            "Sugerencia para mejorar la búsqueda: incluye un identificador único. "
+            "**Sugerencia para mejorar la búsqueda:** Incluye un identificador único. "
             "Ejemplo: 'Juan Carlos Araiza Arambula RFC AAAJ830204PA9 en SAT 69-B' "
             "o 'Juan Perez fuente MEX_SANCIONADOS referencia EXP-12345'."
         )
@@ -307,6 +332,14 @@ async def create_message_and_analysis(
         "completion_tokens": None,
         "latency_ms": latency_ms,
     }
+    
+    # Determine confidence level based on match quality - must be valid enum value
+    if match_tiers.get("exact"):
+        confidence_level = "high"
+    elif match_tiers.get("strong"):
+        confidence_level = "medium"
+    else:
+        confidence_level = "low"
 
     assistant_message = AIChatMessage(
         session_id=session_obj.id,
@@ -329,6 +362,10 @@ async def create_message_and_analysis(
         "usage": assistant_message.usage,
         "model_version": assistant_message.model_version,
         "created_at": assistant_message.created_at,
+        "confidence": confidence_level,
+        "ambiguity_detected": needs_clarification,
+        "suggested_refinements": clarification_suggestions,
+        "match_tiers": match_tiers,
     }
 
 
