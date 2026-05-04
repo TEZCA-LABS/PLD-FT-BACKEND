@@ -29,7 +29,12 @@ from app.services.user_service import (
 from app.services.entity_resolution_service import cluster_entities
 from app.schemas.user_schema import UserCreate
 from app.core.security import get_password_hash
-from app.tasks.sanctions_tasks import sync_un_sanctions_task, sync_mex_sanctions_task
+from app.tasks.sanctions_tasks import (
+    sync_un_sanctions_task, 
+    sync_mex_sanctions_task,
+    sync_ofac_sdn_task,
+    sync_ofac_cons_task
+)
 
 from scripts.utils import (
     setup_asyncio_policy,
@@ -85,10 +90,10 @@ def sync_sat(verbose):
 
 
 @data_sync.command('sanctions')
-@click.option('--source', type=click.Choice(['un', 'mex', 'all']), default='all',
-              help='Sync UN, MEX, or all sanctions')
+@click.option('--source', type=click.Choice(['un', 'mex', 'ofac', 'all']), default='all',
+              help='Sync UN, MEX, OFAC, or all sanctions')
 def sync_sanctions(source):
-    """Sync UN and/or Mexican sanctions lists using Celery workers."""
+    """Sync UN, Mexican, and/or OFAC sanctions lists using Celery workers."""
     try:
         tasks = []
         
@@ -103,6 +108,16 @@ def sync_sanctions(source):
             task = sync_mex_sanctions_task.delay()
             tasks.append(('MEX', task.id))
             logger.info(f"✅ MEX Task ID: {task.id}")
+
+        if source in ['ofac', 'all']:
+            logger.info("📤 Dispatching OFAC SDN & CONS Sanctions sync to Celery worker...")
+            task_sdn = sync_ofac_sdn_task.delay()
+            tasks.append(('OFAC SDN', task_sdn.id))
+            logger.info(f"✅ OFAC SDN Task ID: {task_sdn.id}")
+            
+            task_cons = sync_ofac_cons_task.delay()
+            tasks.append(('OFAC CONS', task_cons.id))
+            logger.info(f"✅ OFAC CONS Task ID: {task_cons.id}")
         
         click.secho("\n✅ Tasks dispatched to workers:", fg='green')
         for name, task_id in tasks:

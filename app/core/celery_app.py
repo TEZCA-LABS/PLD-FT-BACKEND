@@ -7,6 +7,7 @@ celery_app = Celery("worker", broker=settings.REDIS_URL, backend=settings.REDIS_
 celery_app.conf.task_routes = {
     "app.services.etl.tasks.*": {"queue": "main-queue"},
     "app.tasks.sanctions_tasks.*": {"queue": "main-queue"},
+    "sync_*": {"queue": "main-queue"},
 }
 
 # Import tasks to ensure registration

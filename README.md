@@ -172,12 +172,13 @@ docker-compose exec backend python -m scripts.cli [command] [subcommand] [option
 # Sincronizar SAT 69-B (Contribuyentes Incumplidos)
 docker-compose exec backend python -m scripts.cli data-sync sat
 
-# Sincronizar sanciones UN + México vía Celery workers
+# Sincronizar sanciones (UN, México y OFAC) vía Celery workers
 docker-compose exec backend python -m scripts.cli data-sync sanctions
 
-# Sincronizar solo UN o MEX
+# Sincronizar solo fuentes específicas (un, mex, ofac)
 docker-compose exec backend python -m scripts.cli data-sync sanctions --source un
 docker-compose exec backend python -m scripts.cli data-sync sanctions --source mex
+docker-compose exec backend python -m scripts.cli data-sync sanctions --source ofac
 
 # Clustering de entidades (desambiguación y unificación)
 docker-compose exec backend python -m scripts.cli data-sync cluster
