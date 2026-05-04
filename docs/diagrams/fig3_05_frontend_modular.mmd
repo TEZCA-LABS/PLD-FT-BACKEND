@@ -1,52 +1,47 @@
+---
+config:
+  themeVariables:
+    fontSize: 40px
+    fontFamily: arial
+  layout: elk
+---
 flowchart TB
-    subgraph UI[Presentacion Frontend]
-        PAGES[Pages\nSecureLogin/Search/Users/Roles/Audit/AIChat]
-        LAYOUTS[Layouts + UI Components\nSidebarLayout/AuthLayout]
-        ROUTES[ProtectedRoute\ncontrol por rol]
-    end
-
-    subgraph FEATURES[Arquitectura basada en funcionalidades]
-        AUTH[auth\napi + hooks + components]
-        SEARCH[search\napi + hooks + components]
-        USERS[users\napi + hooks + components]
-        ROLES[roles\napi + hooks + components]
-        AUDIT[audit\napi + hooks + components]
-        AICHAT[ai-chat\napi + hooks + components]
-        ENTITIES[entities\napi + hooks + components]
-    end
-
-    subgraph STATE[Estado y sincronizacion]
-        ZUSTAND[Zustand\nauthStore]
-        QUERY[TanStack Query\nqueryClient]
-        HOOKS[Custom Hooks\nuseAuth/useIntelligence/useAudit]
-    end
-
-    subgraph DATA[Acceso a datos]
-        AXIOS[lib/axios\nBearer token + interceptores 401/403]
-        ENV[config/env]
-    end
-
-    subgraph API[Backend FastAPI]
-        ENDPOINTS["API v1\nauth users roles search audit intelligence entities"]
-    end
-
-    PAGES --> ROUTES
-    PAGES --> FEATURES
+ subgraph UI["Presentacion Frontend"]
+        PAGES["Pages\nSecureLogin/Search/Users/Roles/Audit/AIChat"]
+        LAYOUTS["Layouts + UI Components\nSidebarLayout/AuthLayout"]
+        ROUTES["ProtectedRoute\ncontrol por rol"]
+  end
+ subgraph FEATURES["Arquitectura basada en funcionalidades"]
+        AUTH["auth\napi + hooks + components"]
+        SEARCH["search\napi + hooks + components"]
+        USERS["users\napi + hooks + components"]
+        ROLES["roles\napi + hooks + components"]
+        AUDIT["audit\napi + hooks + components"]
+        AICHAT["ai-chat\napi + hooks + components"]
+        ENTITIES["entities\napi + hooks + components"]
+  end
+ subgraph STATE["Estado y sincronizacion"]
+        ZUSTAND["Zustand\nauthStore"]
+        QUERY["TanStack Query\nqueryClient"]
+        HOOKS["Custom Hooks\nuseAuth/useIntelligence/useAudit"]
+  end
+ subgraph DATA["Acceso a datos"]
+        AXIOS["lib/axios\nBearer token + interceptores 401/403"]
+        ENV["config/env"]
+  end
+ subgraph API["Backend FastAPI"]
+        ENDPOINTS["/api/v1/..."]
+  end
+    PAGES --> ROUTES & FEATURES
     LAYOUTS --> FEATURES
-
     AUTH --> HOOKS
     SEARCH --> HOOKS
     USERS --> HOOKS
     ROLES --> HOOKS
     AUDIT --> HOOKS
-    AICHAT --> HOOKS
+    AICHAT --> HOOKS & AUDIT
     ENTITIES --> HOOKS
-
     ROUTES --> ZUSTAND
-    HOOKS --> QUERY
-    HOOKS --> ZUSTAND
-    HOOKS --> AXIOS
+    HOOKS --> QUERY & ZUSTAND & AXIOS
     ENV --> AXIOS
     AXIOS --> ENDPOINTS
-
-    AICHAT --> AUDIT
