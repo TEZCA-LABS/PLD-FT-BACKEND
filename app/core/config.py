@@ -1,4 +1,3 @@
-
 from typing import Any, List, Union
 from pydantic import AnyHttpUrl, Field, validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -55,6 +54,28 @@ class Settings(BaseSettings):
 
     # CORS
     BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
+
+    @validator("BACKEND_CORS_ORIGINS", pre=True)
+    def parse_cors_origins(cls, v):
+        """Parse CORS origins from comma-separated string or JSON list"""
+        if isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            if not v or v.strip() == "":
+                return []
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return []
+
+    # LOGGING
+    LOG_LEVEL: str = "INFO"
+
+    # ENVIRONMENT
+    ENVIRONMENT: str = "development"
+
+    # FEATURE FLAGS
+    ENABLE_RAG: bool = True
+    ENABLE_CELERY_WORKER: bool = True
+    AUTO_MIGRATE: bool = False
 
     model_config = SettingsConfigDict(case_sensitive=True, env_file=".env")
 
