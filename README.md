@@ -53,7 +53,7 @@ docker-compose exec backend alembic upgrade head
 docker-compose exec backend python scripts/seed_database.py
 
 # 6. Verifique que está running
-curl http://localhost:8000/health
+curl http://localhost:8001/health
 ```
 
 ### Documentos Importantes
@@ -367,8 +367,8 @@ docker-compose logs -f backend
 docker-compose ps
 
 # Teste de humo (smoke test)
-curl http://localhost:8000/health
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/audit-logs
+curl http://localhost:8001/health
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8001/api/v1/audit-logs
 ```
 
 ---

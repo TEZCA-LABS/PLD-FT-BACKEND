@@ -43,6 +43,8 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
     ports:
       - "8001:8001"
+    env_file:
+      - .env
     environment:
       - POSTGRES_SERVER=db
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
@@ -52,6 +54,7 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-placeholder}
       - SECRET_KEY=${SECRET_KEY:-dev-key}
       - DEBUG=${DEBUG:-False}
+      - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS:-["http://localhost:3000","http://localhost:5173"]}
     depends_on:
       db:
         condition: service_healthy
@@ -76,6 +79,8 @@ services:
       dockerfile: Dockerfile
     container_name: pld-ft-worker
     command: celery -A app.core.celery_app worker --loglevel=info --concurrency=4 -Q main-queue
+    env_file:
+      - .env
     environment:
       - POSTGRES_SERVER=db
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
