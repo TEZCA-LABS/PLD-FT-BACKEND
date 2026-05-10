@@ -32,6 +32,16 @@ https://www.figma.com/design/vklVs1Dog1P2WgnDREba1h/PLD-FT?node-id=0-1&t=SXKX9OU
 
 ## Deployment Rápido
 
+### Según la versión de docker que se este usando los comandos pueden variar:
+
+```bash
+# Primera opción
+docker-compose
+
+# Segunda opción
+docker compose
+```
+
 ### Primeros pasos (5 minutos)
 
 ```bash
