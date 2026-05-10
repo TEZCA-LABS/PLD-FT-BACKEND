@@ -1,6 +1,6 @@
 
 from typing import Any, List
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +15,7 @@ from app.services.user_service import (
     delete_user
 )
 
+from app.services.audit_service import log_kyc_modification
 from app.api import deps
 from app.core.config import settings
 
@@ -22,6 +23,7 @@ router = APIRouter()
 
 @router.post("/", response_model=User)
 async def create_user_endpoint(
+    request: Request,
     *,
     db: AsyncSession = Depends(get_db),
     user_in: UserCreate,
@@ -52,10 +54,20 @@ async def create_user_endpoint(
             detail="The user with this username already exists in the system.",
         )
     user = await create_user(db, user=user_in, created_by_id=current_user.id)
+    
+    await log_kyc_modification(
+        db=db,
+        user_id=current_user.id,
+        entity_name=f"Usuario Creado: {user.email}",
+        ip_address=request.client.host,
+        details={"created_user_id": user.id}
+    )
+    
     return user
 
 @router.put("/{user_id}", response_model=User)
 async def update_user_endpoint(
+    request: Request,
     *,
     db: AsyncSession = Depends(get_db),
     user_id: int,
@@ -75,6 +87,15 @@ async def update_user_endpoint(
             detail="The user with this id does not exist in the system",
         )
     user = await update_user(db, db_user=user, user_in=user_in)
+    
+    await log_kyc_modification(
+        db=db,
+        user_id=current_user.id,
+        entity_name=f"Usuario Modificado: {user.email}",
+        ip_address=request.client.host,
+        details={"updated_user_id": user.id}
+    )
+    
     return user
 
 @router.get("/", response_model=List[User])

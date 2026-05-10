@@ -32,6 +32,60 @@ async def log_search(
     await db.refresh(log_entry)
     return log_entry
 
+async def log_access(
+    db: AsyncSession, 
+    user_id: int, 
+    ip_address: str, 
+    action: str = "LOGIN",
+    details: Dict[str, Any] = None
+) -> AuditLog:
+    """
+    Logs system access events like login/logout.
+    """
+    if details is None:
+        details = {}
+        
+    details["ip_address"] = ip_address
+    details["query"] = "Acceso al Sistema"
+    
+    log_entry = AuditLog(
+        user_id=user_id,
+        action=action,
+        details=details
+    )
+    db.add(log_entry)
+    await db.commit()
+    await db.refresh(log_entry)
+    return log_entry
+
+async def log_kyc_modification(
+    db: AsyncSession, 
+    user_id: int, 
+    entity_name: str,
+    ip_address: str, 
+    action: str = "KYC",
+    details: Dict[str, Any] = None
+) -> AuditLog:
+    """
+    Logs KYC modifications.
+    """
+    if details is None:
+        details = {}
+        
+    details["ip_address"] = ip_address
+    details["query"] = entity_name
+    
+    log_entry = AuditLog(
+        user_id=user_id,
+        action=action,
+        details=details
+    )
+    db.add(log_entry)
+    await db.commit()
+    await db.refresh(log_entry)
+    return log_entry
+
+
 async def get_audit_logs(
     db: AsyncSession, 
     skip: int = 0, 
