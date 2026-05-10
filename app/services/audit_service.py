@@ -5,6 +5,7 @@ from sqlalchemy.future import select
 from sqlalchemy import desc, cast, String
 
 from app.models.audit_log import AuditLog
+from app.models.user import User
 
 async def log_search(
     db: AsyncSession, 
@@ -100,7 +101,7 @@ async def get_audit_logs(
     Retrieves audit logs. 
     If user_id is provided, filters by that user (for user's own history, if we wanted to allow that).
     """
-    query = select(AuditLog)
+    query = select(AuditLog, User.email.label("user_email")).outerjoin(User, AuditLog.user_id == User.id)
     
     if user_id:
         query = query.filter(AuditLog.user_id == user_id)
@@ -120,4 +121,11 @@ async def get_audit_logs(
     query = query.order_by(desc(AuditLog.timestamp)).offset(skip).limit(limit)
         
     result = await db.execute(query)
-    return result.scalars().all()
+    rows = result.all()
+    
+    logs = []
+    for log_obj, email in rows:
+        log_obj.user_email = email
+        logs.append(log_obj)
+        
+    return logs

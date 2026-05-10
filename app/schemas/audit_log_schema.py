@@ -12,6 +12,7 @@ class AuditLogCreate(AuditLogBase):
 class AuditLog(AuditLogBase):
     id: int
     user_id: int
+    user_email: Optional[str] = None
     timestamp: datetime
 
     class Config:
