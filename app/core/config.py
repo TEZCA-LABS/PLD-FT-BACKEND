@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     OFAC_CONS_XML_URL: str = "https://www.treasury.gov/ofac/downloads/sanctions/1.0/cons_advanced.xml"
 
     # CORS
-    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
+    BACKEND_CORS_ORIGINS: List[str] = []  # Cambiar de List[AnyHttpUrl] a List[str]
 
     @validator("BACKEND_CORS_ORIGINS", pre=True)
     def parse_cors_origins(cls, v):
