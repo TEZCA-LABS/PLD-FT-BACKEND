@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exportación de Caso - AI Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        @page {
+            size: letter;
+            margin: 20mm 20mm 25mm 20mm;
+            @bottom-center {
+                content: "Página " counter(page) " de " counter(pages);
+                font-size: 10px;
+                color: #64748b;
+            }
+            @bottom-right {
+                content: "CLASIFICACIÓN: CONFIDENCIAL";
+                font-size: 9px;
+                color: #dc2626;
+                font-weight: bold;
+            }
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+            color: #121417;
+            line-height: 1.5;
+            background-color: #fcfcfd;
+        }
+
+        /* ===== HEADER ===== */
+        .pdf-header {
+            background: linear-gradient(135deg, #1a427a 0%, #2c5c9e 100%);
+            color: white;
+            padding: 30px 0;
+            text-align: center;
+            border-bottom: 4px solid #2c5c9e;
+            margin: -20mm -20mm 0 -20mm;
+            padding-left: 20mm;
+            padding-right: 20mm;
+            page-break-after: avoid;
+        }
+
+        .header-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+
+        .header-subtitle {
+            font-size: 12px;
+            opacity: 0.95;
+            margin-bottom: 15px;
+            font-weight: 500;
+        }
+
+        .header-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            opacity: 0.9;
+            border-top: 1px solid rgba(255, 255, 255, 0.3);
+            padding-top: 10px;
+        }
+
+        .header-meta span {
+            display: inline-block;
+        }
+
+        /* ===== SECTION TITLES ===== */
+        h1 {
+            font-size: 22px;
+            font-weight: 700;
+            color: #1a427a;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #2c5c9e;
+            page-break-after: avoid;
+        }
+
+        h2 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2c5c9e;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            page-break-after: avoid;
+        }
+
+        h3 {
+            font-size: 13px;
+            font-weight: 600;
+            color: #475569;
+            margin-top: 15px;
+            margin-bottom: 10px;
+            page-break-after: avoid;
+        }
+
+        /* ===== TABLE OF CONTENTS ===== */
+        .table-of-contents {
+            background-color: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 30px;
+            page-break-inside: avoid;
+        }
+
+        .toc-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #1a427a;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .toc-item {
+            font-size: 11px;
+            padding: 6px 0;
+            color: #475569;
+        }
+
+        .toc-item-number {
+            display: inline-block;
+            width: 20px;
+        }
+
+        /* ===== SESSION INFO ===== */
+        .session-info {
+            background-color: #f0f4f8;
+            border-left: 4px solid #2c5c9e;
+            padding: 15px;
+            margin-bottom: 25px;
+            page-break-inside: avoid;
+        }
+
+        .info-row {
+            display: flex;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #1a427a;
+            width: 150px;
+            flex-shrink: 0;
+        }
+
+        .info-value {
+            color: #334155;
+            word-break: break-word;
+        }
+
+        /* ===== EXECUTIVE SUMMARY ===== */
+        .executive-summary {
+            background-color: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            margin-bottom: 25px;
+            page-break-inside: avoid;
+            border-radius: 4px;
+        }
+
+        .summary-header {
+            font-weight: 700;
+            color: #92400e;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+
+        .summary-text {
+            color: #78350f;
+            font-size: 11px;
+            line-height: 1.6;
+        }
+
+        /* ===== MESSAGES / ANALYSIS ===== */
+        .message-container {
+            margin-bottom: 20px;
+            page-break-inside: avoid;
+        }
+
+        .message {
+            padding: 12px;
+            margin-bottom: 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            line-height: 1.6;
+        }
+
+        .message.user {
+            background-color: #e0e7ff;
+            border-left: 3px solid #4f46e5;
+        }
+
+        .message.assistant {
+            background-color: #dbeafe;
+            border-left: 3px solid #2c5c9e;
+        }
+
+        .message-header {
+            font-weight: 700;
+            color: #1a427a;
+            font-size: 10px;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .message-time {
+            color: #64748b;
+            font-size: 9px;
+            margin-left: 10px;
+        }
+
+        .message-content {
+            color: #334155;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        /* ===== TABLES ===== */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            font-size: 11px;
+        }
+
+        table thead {
+            background-color: #1a427a;
+            color: white;
+        }
+
+        table th {
+            padding: 10px;
+            text-align: left;
+            font-weight: 600;
+            border: 1px solid #0f1419;
+        }
+
+        table td {
+            padding: 10px;
+            border: 1px solid #e2e8f0;
+        }
+
+        table tbody tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        table tbody tr:hover {
+            background-color: #f1f5f9;
+        }
+
+        /* ===== METADATA ===== */
+        .metadata {
+            background-color: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            padding: 15px;
+            margin-top: 30px;
+            font-size: 10px;
+            color: #475569;
+            page-break-inside: avoid;
+        }
+
+        .metadata-title {
+            font-weight: 700;
+            color: #1a427a;
+            margin-bottom: 10px;
+            font-size: 11px;
+        }
+
+        .metadata-item {
+            margin-bottom: 6px;
+            display: flex;
+        }
+
+        .metadata-key {
+            font-weight: 600;
+            width: 120px;
+            color: #334155;
+        }
+
+        .metadata-val {
+            color: #64748b;
+            word-break: break-word;
+        }
+
+        /* ===== UTILITIES ===== */
+        .page-break {
+            page-break-after: always;
+        }
+
+        .section-spacer {
+            height: 20px;
+        }
+
+        .empty-state {
+            color: #94a3b8;
+            font-style: italic;
+            font-size: 11px;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .classification-banner {
+            background-color: #fecaca;
+            color: #991b1b;
+            padding: 8px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 11px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media print {
+            body {
+                background: white;
+            }
+            .page-break-force {
+                page-break-after: always;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- HEADER -->
+    <div class="pdf-header">
+        <div class="header-title">📋 Asistente de Cumplimiento IA</div>
+        <div class="header-subtitle">Exportación de Caso - Análisis de Entidades</div>
+        <div class="header-meta">
+            <span><strong>Sesión:</strong> {{ session.id }}</span>
+            <span><strong>Generado:</strong> {{ metadata.generated_at }}</span>
+            <span><strong>Clasificación:</strong> CONFIDENCIAL</span>
+        </div>
+    </div>
+
+    <div class="classification-banner">🔒 Clasificación: Información Confidencial - Acceso Restringido</div>
+
+    <!-- TABLE OF CONTENTS -->
+    <div class="table-of-contents">
+        <div class="toc-title">📑 Tabla de Contenidos</div>
+        <div class="toc-item"><span class="toc-item-number">1.</span> Información de la Sesión</div>
+        <div class="toc-item"><span class="toc-item-number">2.</span> Resumen Ejecutivo</div>
+        <div class="toc-item"><span class="toc-item-number">3.</span> Análisis Detallado</div>
+        {% if sources %}<div class="toc-item"><span class="toc-item-number">4.</span> Fuentes Identificadas</div>{% endif %}
+        {% if entities %}<div class="toc-item"><span class="toc-item-number">5.</span> Entidades Relacionadas</div>{% endif %}
+        <div class="toc-item"><span class="toc-item-number">{{ last_section }}.</span> Información de Documento</div>
+    </div>
+
+    <!-- SECTION 1: SESSION INFO -->
+    <h1>1. Información de la Sesión</h1>
+    <div class="session-info">
+        <div class="info-row">
+            <span class="info-label">ID de Sesión:</span>
+            <span class="info-value">{{ session.id }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Título:</span>
+            <span class="info-value">{{ session.title }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Estado:</span>
+            <span class="info-value">{{ session.status }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Creada:</span>
+            <span class="info-value">{{ session.created_at }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Última Actualización:</span>
+            <span class="info-value">{{ session.updated_at }}</span>
+        </div>
+        {% if session.initial_context %}
+        <div class="info-row">
+            <span class="info-label">Contexto Inicial:</span>
+            <span class="info-value">{{ session.initial_context }}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- SECTION 2: EXECUTIVE SUMMARY -->
+    <h1>2. Resumen Ejecutivo</h1>
+    {% if messages %}
+        {% set executive_messages = messages[:3] %}
+        {% for msg in executive_messages %}
+            {% if msg.role == 'assistant' %}
+                <div class="executive-summary">
+                    <div class="summary-header">📌 Hallazgo Clave - {{ loop.index }}</div>
+                    <div class="summary-text">
+                        {{ msg.content[:500] }}{% if msg.content|length > 500 %}...{% endif %}
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+    {% else %}
+        <div class="empty-state">No hay mensajes disponibles en esta sesión.</div>
+    {% endif %}
+
+    <div class="page-break"></div>
+
+    <!-- SECTION 3: DETAILED ANALYSIS -->
+    <h1>3. Análisis Detallado</h1>
+    <h2>Conversación Completa</h2>
+    
+    {% if messages %}
+        {% for msg in messages %}
+            <div class="message-container">
+                <div class="message {{ msg.role }}">
+                    <div class="message-header">
+                        {% if msg.role == 'user' %}
+                            👤 Consulta del Analista
+                        {% else %}
+                            🤖 Respuesta de IA
+                        {% endif %}
+                        <span class="message-time">{{ msg.created_at }}</span>
+                    </div>
+                    <div class="message-content">{{ msg.content }}</div>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state">No hay análisis disponible.</div>
+    {% endif %}
+
+    {% if sources %}
+        <div class="page-break"></div>
+        <!-- SECTION 4: SOURCES -->
+        <h1>4. Fuentes Identificadas</h1>
+        <table>
+            <thead>
+                <tr>
+                    <th>Fuente</th>
+                    <th>Organización</th>
+                    <th>Fecha</th>
+                    <th>Referencia</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for source in sources %}
+                    <tr>
+                        <td>{{ source.get('name', 'N/A') }}</td>
+                        <td>{{ source.get('organization', 'N/A') }}</td>
+                        <td>{{ source.get('date', 'N/A') }}</td>
+                        <td>{% if source.get('url') %}<a href="{{ source.url }}">Enlace</a>{% else %}N/A{% endif %}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+
+    {% if entities %}
+        {% if not sources %}<div class="page-break"></div>{% endif %}
+        <!-- SECTION 5: ENTITIES -->
+        <h1>{% if sources %}5{% else %}4{% endif %}. Entidades Relacionadas</h1>
+        <table>
+            <thead>
+                <tr>
+                    <th>Entidad</th>
+                    <th>Relación</th>
+                    <th>Tipo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entity in entities %}
+                    <tr>
+                        <td>{{ entity.get('name', entity.get('entity_name', 'N/A')) }}</td>
+                        <td>{{ entity.get('relation', entity.get('relationship', 'N/A')) }}</td>
+                        <td>{{ entity.get('type', 'domain') }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+
+    <div class="page-break"></div>
+
+    <!-- FINAL SECTION: METADATA -->
+    <h1>{% if sources and entities %}6{% elif sources or entities %}5{% else %}4{% endif %}. Información del Documento</h1>
+    
+    <div class="metadata">
+        <div class="metadata-title">📊 Metadatos de Generación</div>
+        <div class="metadata-item">
+            <span class="metadata-key">Módulo:</span>
+            <span class="metadata-val">{{ metadata.module }}</span>
+        </div>
+        <div class="metadata-item">
+            <span class="metadata-key">Fecha de Generación:</span>
+            <span class="metadata-val">{{ metadata.generated_at }}</span>
+        </div>
+        <div class="metadata-item">
+            <span class="metadata-key">Total de Mensajes:</span>
+            <span class="metadata-val">{{ messages|length }}</span>
+        </div>
+        <div class="metadata-item">
+            <span class="metadata-key">Fuentes Identificadas:</span>
+            <span class="metadata-val">{{ sources|length }}</span>
+        </div>
+        <div class="metadata-item">
+            <span class="metadata-key">Entidades Relacionadas:</span>
+            <span class="metadata-val">{{ entities|length }}</span>
+        </div>
+        <div class="metadata-item">
+            <span class="metadata-key">Clasificación:</span>
+            <span class="metadata-val">CONFIDENCIAL</span>
+        </div>
+    </div>
+
+    <div class="section-spacer"></div>
+    <p style="text-align: center; color: #94a3b8; font-size: 9px; margin-top: 30px;">
+        Este documento es confidencial y está destinado exclusivamente para uso interno.<br>
+        Su distribución sin autorización está prohibida.
+    </p>
+
+</body>
+</html>

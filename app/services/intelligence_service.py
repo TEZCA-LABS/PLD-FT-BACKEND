@@ -4,11 +4,11 @@ import re
 import time
 from datetime import datetime, timezone
 from io import BytesIO
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, UploadFile
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
+from fpdf import FPDF, XPos, YPos
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -514,33 +514,484 @@ async def build_export_payload(
     return payload
 
 
+class CasePDF(FPDF):
+    """Custom PDF class for AI Chat case export with professional formatting"""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.page_count = 0
+        self.title_y = 0
+        self.toc_y = 0
+        
+    def header(self):
+        """Render PDF header on each page"""
+        # Header background
+        self.set_fill_color(26, 66, 122)  # #1a427a
+        self.rect(0, 0, 210, 25, 'F')
+        
+        # Header text
+        self.set_text_color(255, 255, 255)
+        self.set_font('Helvetica', 'B', 16)
+        self.set_xy(10, 8)
+        self.cell(0, 8, 'Asistente de Cumplimiento IA', ln=True)
+        
+        self.set_font('Helvetica', '', 10)
+        self.set_xy(10, 16)
+        self.cell(0, 6, 'Exportacion de Caso - Analisis de Entidades', ln=True)
+        
+        # Reset text color and position for content
+        self.set_text_color(0, 0, 0)
+        self.set_xy(10, 32)
+
+    
+    def footer(self):
+        """Render PDF footer on each page"""
+        self.set_y(-15)
+        
+        # Classification banner
+        self.set_fill_color(220, 38, 38)  # Red for classification
+        self.set_text_color(255, 255, 255)
+        self.set_font('Helvetica', 'B', 8)
+        self.cell(0, 4, 'CLASIFICACION: CONFIDENCIAL', 0, 1, 'C', True)
+        
+        # Page number
+        self.set_text_color(100, 116, 139)  # Gray
+        self.set_font('Helvetica', '', 8)
+        self.cell(0, 4, f'Pagina {self.page_no()}', 0, 0, 'C')
+
+
+def _format_datetime(dt_string: str) -> str:
+    """Format ISO datetime string to readable format"""
+    try:
+        dt = datetime.fromisoformat(str(dt_string).replace('Z', '+00:00'))
+        return dt.strftime('%d/%m/%Y %H:%M:%S')
+    except Exception:
+        return str(dt_string)[:20]
+
+
+def _wrap_text(text: str, max_length: int = 100) -> str:
+    """Wrap text to max length"""
+    if text is None:
+        return 'N/A'
+    text = str(text)
+    if len(text) <= max_length:
+        return text
+    return text[:max_length] + '...'
+
+
+def _normalize_text(value: Any, default: str = 'N/A') -> str:
+    """Normalize optional values for PDF rendering."""
+    if value is None:
+        return default
+    text = str(value).strip()
+    return text if text else default
+
+
+def _split_text_to_width(pdf: FPDF, text: Any, width: float) -> List[str]:
+    """Split text into lines that fit the given cell width."""
+    normalized = _normalize_text(text)
+    max_width = max(width - 2, 1)
+    lines: List[str] = []
+
+    for paragraph in normalized.split('\n'):
+        words = paragraph.split(' ')
+        if not words:
+            lines.append('')
+            continue
+
+        current = ''
+        for word in words:
+            candidate = word if not current else f'{current} {word}'
+            if pdf.get_string_width(candidate) <= max_width:
+                current = candidate
+                continue
+
+            if current:
+                lines.append(current)
+                current = ''
+
+            if pdf.get_string_width(word) <= max_width:
+                current = word
+                continue
+
+            # Hard-wrap words without spaces.
+            chunk = ''
+            for char in word:
+                test_chunk = f'{chunk}{char}'
+                if pdf.get_string_width(test_chunk) <= max_width:
+                    chunk = test_chunk
+                else:
+                    if chunk:
+                        lines.append(chunk)
+                    chunk = char
+            current = chunk
+
+        if current:
+            lines.append(current)
+
+    if not lines:
+        return ['']
+    return lines
+
+
+def _draw_table_row(
+    pdf: FPDF,
+    col_widths: List[float],
+    values: List[Any],
+    line_h: float = 3.5,
+    fill: bool = False,
+    aligns: Optional[List[str]] = None,
+) -> None:
+    """Draw a table row with dynamic height so full text is always visible."""
+    if aligns is None:
+        aligns = ['L'] * len(col_widths)
+
+    row_lines = [_split_text_to_width(pdf, value, col_widths[idx]) for idx, value in enumerate(values)]
+    max_lines = max(len(lines) for lines in row_lines) if row_lines else 1
+    row_height = max_lines * line_h
+
+    if pdf.get_y() + row_height > pdf.page_break_trigger:
+        pdf.add_page()
+
+    x_start = pdf.get_x()
+    y_start = pdf.get_y()
+
+    for idx, width in enumerate(col_widths):
+        cell_text = '\n'.join(row_lines[idx])
+        x = pdf.get_x()
+        y = pdf.get_y()
+        pdf.multi_cell(
+            width,
+            line_h,
+            cell_text,
+            border=1,
+            align=aligns[idx],
+            fill=fill,
+            new_x=XPos.RIGHT,
+            new_y=YPos.TOP,
+        )
+        pdf.set_xy(x + width, y)
+
+    pdf.set_xy(x_start, y_start + row_height)
+
+
 def build_pdf_from_payload(payload: Dict[str, Any]) -> bytes:
-    output = BytesIO()
-    pdf = canvas.Canvas(output, pagesize=letter)
-    width, height = letter
-    y = height - 50
+    """
+    Build professional PDF from export payload using FPDF2.
+    
+    Generates a structured PDF with:
+    - Professional header with branding (blue color scheme)
+    - Session information section
+    - Executive summary from first 3 messages
+    - Complete conversation/analysis
+    - Sources and entities tables
+    - Document metadata
+    - Proper UTF-8 encoding for special characters (á, é, í, ó, ú, ñ)
+    - Classification footer on each page
+    
+    Args:
+        payload: Dictionary with session, messages, sources, entities, metadata
+        
+    Returns:
+        bytes: PDF file content
+    """
+    try:
+        pdf = CasePDF()
+        pdf.set_margins(left=15, top=20, right=15)
+        pdf.set_auto_page_break(auto=True, margin=20)
+        pdf.add_page()
+        
+        # Extract data
+        session_data = payload.get("session", {})
+        messages_data = payload.get("messages", [])
+        sources_data = payload.get("sources", [])
+        entities_data = payload.get("entities", [])
+        metadata_data = payload.get("metadata", {})
+        
+        # ===== TITLE PAGE =====
+        pdf.set_font('Helvetica', 'B', 20)
+        pdf.set_text_color(26, 66, 122)
+        pdf.ln(15)
+        pdf.cell(0, 10, 'CASO DE ANALISIS', 0, 1, 'C')
+        pdf.cell(0, 10, 'Asistente de Cumplimiento IA', 0, 1, 'C')
+        
+        pdf.ln(10)
+        pdf.set_font('Helvetica', '', 11)
+        pdf.set_text_color(0, 0, 0)
+        
+        # Session info on title page
+        pdf.set_font('Helvetica', 'B', 11)
+        pdf.cell(40, 7, 'Titulo:', 0, 0)
+        pdf.set_font('Helvetica', '', 11)
+        pdf.cell(0, 7, session_data.get('title', 'Sin titulo'), 0, 1)
+        
+        pdf.set_font('Helvetica', 'B', 11)
+        pdf.cell(40, 7, 'ID Sesion:', 0, 0)
+        pdf.set_font('Helvetica', '', 11)
+        pdf.cell(0, 7, str(session_data.get('id', 'N/A')), 0, 1)
+        
+        pdf.set_font('Helvetica', 'B', 11)
+        pdf.cell(40, 7, 'Estado:', 0, 0)
+        pdf.set_font('Helvetica', '', 11)
+        pdf.cell(0, 7, session_data.get('status', 'N/A'), 0, 1)
+        
+        pdf.set_font('Helvetica', 'B', 11)
+        pdf.cell(40, 7, 'Creada:', 0, 0)
+        pdf.set_font('Helvetica', '', 11)
+        pdf.cell(0, 7, _format_datetime(session_data.get('created_at', '')), 0, 1)
+        
+        pdf.set_font('Helvetica', 'B', 11)
+        pdf.cell(40, 7, 'Generada:', 0, 0)
+        pdf.set_font('Helvetica', '', 11)
+        pdf.cell(0, 7, _format_datetime(metadata_data.get('generated_at', '')), 0, 1)
+        
+        # Classification
+        pdf.ln(15)
+        pdf.set_fill_color(254, 243, 199)
+        pdf.set_text_color(120, 53, 15)
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(0, 8, 'CLASIFICACION: INFORMACION CONFIDENCIAL', 0, 1, 'C', True)
+        
+        # ===== TABLE OF CONTENTS =====
+        pdf.add_page()
+        pdf.set_font('Helvetica', 'B', 14)
+        pdf.set_text_color(26, 66, 122)
+        pdf.cell(0, 10, 'TABLA DE CONTENIDOS', 0, 1)
+        
+        pdf.set_font('Helvetica', '', 10)
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(5)
+        
+        toc_items = ['1. Analisis Detallado']
+        next_section = 2
 
-    lines = ["AI Chat Case Export", ""]
-    lines.append(f"Session ID: {payload.get('session', {}).get('id')}")
-    lines.append(f"Title: {payload.get('session', {}).get('title')}")
-    lines.append(f"Status: {payload.get('session', {}).get('status')}")
-    lines.append("")
+        if sources_data:
+            toc_items.append(f'{next_section}. Fuentes Identificadas')
+            next_section += 1
+        if entities_data:
+            toc_items.append(f'{next_section}. Entidades Relacionadas')
+            next_section += 1
 
-    for message in payload.get("messages", []):
-        lines.append(f"[{message.get('role')}] {message.get('created_at')}")
-        lines.append(message.get("content", ""))
-        lines.append("")
+        toc_items.append(f'{next_section}. Informacion del Documento')
+        
+        for item in toc_items:
+            pdf.cell(0, 7, f'  {item}', 0, 1)
+        
+        # ===== SECTION 1: DETAILED ANALYSIS =====
+        pdf.add_page()
+        pdf.set_font('Helvetica', 'B', 14)
+        pdf.set_text_color(26, 66, 122)
+        pdf.cell(0, 10, '1. ANALISIS DETALLADO', 0, 1)
+        
+        pdf.set_font('Helvetica', 'B', 11)
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(0, 8, 'Conversacion Completa', 0, 1)
+        
+        pdf.set_font('Helvetica', '', 9)
+        pdf.ln(2)
+        
+        for idx, msg in enumerate(messages_data, 1):
+            # Message header
+            role_label = '[Consulta]' if msg.get('role') == 'user' else '[Respuesta]'
+            timestamp = _format_datetime(msg.get('created_at', ''))
+            
+            # Background color based on role
+            if msg.get('role') == 'user':
+                pdf.set_fill_color(224, 231, 255)
+            else:
+                pdf.set_fill_color(219, 234, 254)
+            
+            pdf.set_font('Helvetica', 'B', 9)
+            pdf.set_text_color(26, 66, 122)
+            pdf.multi_cell(
+                0,
+                6,
+                f'{role_label} [{timestamp}]',
+                border=0,
+                align='L',
+                fill=True,
+                new_x=XPos.LMARGIN,
+                new_y=YPos.NEXT,
+            )
+            
+            # Message content
+            pdf.set_font('Helvetica', '', 8)
+            pdf.set_text_color(0, 0, 0)
+            
+            content = msg.get('content', '')
+            paragraphs = content.split('\n')
+            for para in paragraphs:
+                if para.strip():
+                    pdf.multi_cell(
+                        0,
+                        4,
+                        para.strip(),
+                        border=0,
+                        align='L',
+                        new_x=XPos.LMARGIN,
+                        new_y=YPos.NEXT,
+                    )
+            
+            pdf.ln(1)
+            
+            # Check if we need a new page
+            if pdf.get_y() > 250:
+                pdf.add_page()
+        
+        # ===== SECTION 2+: SOURCES =====
+        if sources_data:
+            pdf.add_page()
+            sources_section_num = 2
+            pdf.set_font('Helvetica', 'B', 14)
+            pdf.set_text_color(26, 66, 122)
+            pdf.cell(0, 10, f'{sources_section_num}. FUENTES IDENTIFICADAS', 0, 1)
+            
+            pdf.set_font('Helvetica', '', 8)
+            pdf.set_text_color(0, 0, 0)
+            pdf.ln(3)
+            
+            # Table header
+            col_width = [45, 45, 40, 40]
+            headers = ['Fuente', 'Organizacion', 'Fecha', 'Referencia']
+            
+            pdf.set_fill_color(26, 66, 122)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font('Helvetica', 'B', 8)
+            
+            for i, header in enumerate(headers):
+                pdf.cell(col_width[i], 6, header, 1, 0, 'C', True)
+            pdf.ln()
+            
+            # Table rows
+            pdf.set_fill_color(248, 250, 252)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font('Helvetica', '', 7)
+            
+            for idx, source in enumerate(sources_data):
+                fill_row = idx % 2 == 0
+                row_values = [
+                    _normalize_text(source.get('name')),
+                    _normalize_text(source.get('organization')),
+                    _normalize_text(source.get('date')),
+                    _normalize_text(source.get('url')),
+                ]
+                _draw_table_row(
+                    pdf,
+                    col_width,
+                    row_values,
+                    line_h=3.5,
+                    fill=fill_row,
+                    aligns=['L', 'L', 'L', 'L'],
+                )
+        
+        # ===== SECTION 2+/3+: ENTITIES =====
+        if entities_data:
+            pdf.add_page()
+            section_num = 3 if sources_data else 2
+            pdf.set_font('Helvetica', 'B', 14)
+            pdf.set_text_color(26, 66, 122)
+            pdf.cell(0, 10, f'{section_num}. ENTIDADES RELACIONADAS', 0, 1)
+            
+            pdf.set_font('Helvetica', '', 8)
+            pdf.set_text_color(0, 0, 0)
+            pdf.ln(3)
+            
+            # Table header
+            col_width = [55, 55, 50]
+            headers = ['Entidad', 'Relacion', 'Tipo']
+            
+            pdf.set_fill_color(26, 66, 122)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font('Helvetica', 'B', 8)
+            
+            for i, header in enumerate(headers):
+                pdf.cell(col_width[i], 6, header, 1, 0, 'C', True)
+            pdf.ln()
+            
+            # Table rows
+            pdf.set_fill_color(248, 250, 252)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font('Helvetica', '', 7)
+            
+            for idx, entity in enumerate(entities_data):
+                name = entity.get('name') or entity.get('entity_name') or 'N/A'
+                relation = entity.get('relation') or entity.get('relationship') or 'N/A'
+                etype = entity.get('type') or 'domain'
 
-    for line in lines:
-        if y < 50:
-            pdf.showPage()
-            y = height - 50
-        pdf.drawString(50, y, str(line)[:120])
-        y -= 14
-
-    pdf.save()
-    output.seek(0)
-    return output.read()
+                _draw_table_row(
+                    pdf,
+                    col_width,
+                    [_normalize_text(name), _normalize_text(relation), _normalize_text(etype)],
+                    line_h=3.5,
+                    fill=idx % 2 == 0,
+                    aligns=['L', 'L', 'L'],
+                )
+        
+        # ===== FINAL SECTION: METADATA =====
+        pdf.add_page()
+        final_section = len(toc_items)
+        pdf.set_font('Helvetica', 'B', 14)
+        pdf.set_text_color(26, 66, 122)
+        pdf.cell(0, 10, f'{final_section}. INFORMACION DEL DOCUMENTO', 0, 1)
+        
+        pdf.set_font('Helvetica', '', 10)
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(5)
+        
+        # Metadata box
+        pdf.set_fill_color(241, 245, 249)
+        pdf.cell(0, 7, 'Metadatos de Generacion', 0, 1, fill=True)
+        
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(50, 6, 'Modulo:', 0, 0)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(0, 6, metadata_data.get('module') or 'N/A', 0, 1)
+        
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(50, 6, 'Fecha Generacion:', 0, 0)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(0, 6, _format_datetime(metadata_data.get('generated_at', '')), 0, 1)
+        
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(50, 6, 'Total de Mensajes:', 0, 0)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(0, 6, str(len(messages_data)), 0, 1)
+        
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(50, 6, 'Fuentes Identificadas:', 0, 0)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(0, 6, str(len(sources_data)), 0, 1)
+        
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(50, 6, 'Entidades Relacionadas:', 0, 0)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(0, 6, str(len(entities_data)), 0, 1)
+        
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(50, 6, 'Clasificacion:', 0, 0)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(0, 6, 'CONFIDENCIAL', 0, 1)
+        
+        pdf.ln(10)
+        pdf.set_font('Helvetica', 'I', 8)
+        pdf.set_text_color(100, 116, 139)
+        pdf.multi_cell(180, 4, 
+            'Este documento es confidencial y esta destinado exclusivamente para uso interno.\n' +
+            'Su distribucion sin autorizacion esta prohibida.',
+            border=0, align='C')
+        
+        # Get PDF content as bytes
+        pdf_output = pdf.output()
+        
+        return bytes(pdf_output)
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating PDF: {str(e)}"
+        )
 
 
 def build_json_bytes(payload: Dict[str, Any]) -> bytes:

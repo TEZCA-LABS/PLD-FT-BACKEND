@@ -4,7 +4,7 @@ from typing import Any, Optional
 import os
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, HTTPException
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
@@ -282,8 +282,8 @@ async def export_session_case(
     if output_format == "pdf":
         pdf_bytes = build_pdf_from_payload(export_payload)
         headers = {"Content-Disposition": f'attachment; filename="case_{session_id}.pdf"'}
-        return StreamingResponse(iter([pdf_bytes]), media_type="application/pdf", headers=headers)
+        return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 
     json_bytes = build_json_bytes(export_payload)
     headers = {"Content-Disposition": f'attachment; filename="case_{session_id}.json"'}
-    return StreamingResponse(iter([json_bytes]), media_type="application/json", headers=headers)
+    return Response(content=json_bytes, media_type="application/json", headers=headers)
