@@ -660,13 +660,19 @@ def _draw_table_row(
         cell_text = '\n'.join(row_lines[idx])
         x = pdf.get_x()
         y = pdf.get_y()
+        
+        # Draw the cell background and border manually
+        style = 'DF' if fill else 'D'
+        pdf.rect(x, y, width, row_height, style=style)
+        
+        # Draw the text without border and fill
         pdf.multi_cell(
             width,
             line_h,
             cell_text,
-            border=1,
+            border=0,
             align=aligns[idx],
-            fill=fill,
+            fill=False,
             new_x=XPos.RIGHT,
             new_y=YPos.TOP,
         )
