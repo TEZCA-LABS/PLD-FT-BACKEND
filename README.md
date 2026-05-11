@@ -1,7 +1,7 @@
 # Documentación Técnica: Arquitectura Backend PLD/FT
 
 **Versión:** 1.1  
-**Fecha:** 13 de Diciembre, 2025 | **Actualizado:** 15 de abril, 2026
+**Fecha:** 13 de Diciembre, 2025 | **Actualizado:** 05 de Mayo, 2026
 
 ---
 
@@ -27,6 +27,9 @@ https://docs.google.com/document/d/1_FkgUz1kroUEUxOYc9tY1YGw7hadGMCo/edit?usp=sh
 
 ### Figma
 https://www.figma.com/design/vklVs1Dog1P2WgnDREba1h/PLD-FT?node-id=0-1&t=SXKX9OUfKaSOomU1-1
+
+### Video del prototipo
+https://youtu.be/Ml1f9fDoPc4
 
 ---
 
